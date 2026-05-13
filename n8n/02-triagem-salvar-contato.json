@@ -1,0 +1,180 @@
+{
+  "name": "HSM — Salvar Contato da Triagem",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "bbb00001-0001-4000-8000-000000000001",
+      "name": "Entrada dos Dados",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://qorwluxvwkqhusluzxcr.supabase.co/rest/v1/health_plans?name=ilike.*{{ encodeURIComponent($json.plano_de_saude) }}*&select=id,name&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvcndsdXh2d2txaHVzbHV6eGNyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjA1MTcxNywiZXhwIjoyMDkxNjI3NzE3fQ.mMdrM6MaPYgy7WmMs1fz29_ybikm41fJi4LJEhbKi08"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvcndsdXh2d2txaHVzbHV6eGNyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjA1MTcxNywiZXhwIjoyMDkxNjI3NzE3fQ.mMdrM6MaPYgy7WmMs1fz29_ybikm41fJi4LJEhbKi08"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bbb00001-0001-4000-8000-000000000002",
+      "name": "Buscar Plano de Saúde",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dados originais da triagem (vêm do trigger)\nconst triagem = $('Entrada dos Dados').first().json;\n\n// Resultado da busca do plano\nconst planoResult = $input.all();\nlet health_plan_id = null;\n\n// O HTTP Request retorna um array — se encontrou, pega o id\nif (planoResult.length > 0 && planoResult[0].json) {\n  const data = planoResult[0].json;\n  // Se o resultado é um array (resposta do Supabase)\n  if (Array.isArray(data)) {\n    if (data.length > 0) health_plan_id = data[0].id;\n  } else if (data.id) {\n    health_plan_id = data.id;\n  }\n}\n\nconst urgente = triagem.urgente === true || triagem.urgente === 'true';\n\nconst contactData = {\n  name: triagem.nome || 'não informado',\n  phone: triagem.telefone || 'não informado',\n  contact_type: 'lead',\n  solicitation_target: triagem.solicitation_target || 'voce_mesmo',\n  contact_reason: triagem.contact_reason || 'transtorno_mental_adulto',\n  funnel_stage: 'novo_contato',\n  notes: (urgente ? '[URGENTE] ' : '') + (triagem.resumo || '')\n};\n\nif (health_plan_id) {\n  contactData.health_plan_id = health_plan_id;\n}\n\nreturn [{ json: contactData }];"
+      },
+      "id": "bbb00001-0001-4000-8000-000000000003",
+      "name": "Montar Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://qorwluxvwkqhusluzxcr.supabase.co/rest/v1/contacts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvcndsdXh2d2txaHVzbHV6eGNyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjA1MTcxNywiZXhwIjoyMDkxNjI3NzE3fQ.mMdrM6MaPYgy7WmMs1fz29_ybikm41fJi4LJEhbKi08"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvcndsdXh2d2txaHVzbHV6eGNyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjA1MTcxNywiZXhwIjoyMDkxNjI3NzE3fQ.mMdrM6MaPYgy7WmMs1fz29_ybikm41fJi4LJEhbKi08"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "bbb00001-0001-4000-8000-000000000004",
+      "name": "Criar Contato no Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "result-ok",
+              "name": "sucesso",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "result-msg",
+              "name": "mensagem",
+              "value": "=Triagem salva com sucesso! O contato foi registrado no sistema.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bbb00001-0001-4000-8000-000000000005",
+      "name": "Retorno Sucesso",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1040, 300]
+    }
+  ],
+  "connections": {
+    "Entrada dos Dados": {
+      "main": [
+        [
+          {
+            "node": "Buscar Plano de Saúde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Plano de Saúde": {
+      "main": [
+        [
+          {
+            "node": "Montar Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Payload": {
+      "main": [
+        [
+          {
+            "node": "Criar Contato no Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar Contato no Supabase": {
+      "main": [
+        [
+          {
+            "node": "Retorno Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "HSM",
+      "id": "1"
+    },
+    {
+      "name": "Triagem",
+      "id": "2"
+    },
+    {
+      "name": "Sub-workflow",
+      "id": "3"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-04-13T15:00:00.000Z",
+  "versionId": "bbb00001-2222-4000-8000-222222222222"
+}

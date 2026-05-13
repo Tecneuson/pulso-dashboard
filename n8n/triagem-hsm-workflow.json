@@ -1,0 +1,758 @@
+{
+  "name": "HSM — Triagem via Chatwoot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hsm-triagem",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1800, 40],
+      "id": "hsm-wh-0001-0001-000000000001",
+      "name": "Webhook Chatwoot",
+      "webhookId": "hsm-triagem-webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-message-id",
+              "name": "message_id",
+              "value": "={{ $json.body.conversation.messages[0].id }}",
+              "type": "number"
+            },
+            {
+              "id": "field-conversation-id",
+              "name": "conversation_id",
+              "value": "={{ $json.body.conversation.messages[0].conversation_id }}",
+              "type": "number"
+            },
+            {
+              "id": "field-name",
+              "name": "name",
+              "value": "={{ $json.body.conversation.messages[0].sender.name }}",
+              "type": "string"
+            },
+            {
+              "id": "field-phone",
+              "name": "phone",
+              "value": "={{ $json.body.conversation.meta.sender.phone_number }}",
+              "type": "string"
+            },
+            {
+              "id": "field-email",
+              "name": "email",
+              "value": "={{ $json.body.conversation.meta.sender.email }}",
+              "type": "string"
+            },
+            {
+              "id": "field-message",
+              "name": "message",
+              "value": "={{ $json.body.conversation.messages[0].content }}",
+              "type": "string"
+            },
+            {
+              "id": "field-message-type",
+              "name": "message_type",
+              "value": "={{ $json.body.message_type }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1560, 40],
+      "id": "hsm-wh-0001-0002-000000000002",
+      "name": "Edit Fields",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "check-transbordado",
+              "leftValue": "={{ $json.transbordado }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [-1320, 40],
+      "id": "hsm-wh-0001-0003-000000000003",
+      "name": "Já transbordou?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [-880, -140],
+      "id": "hsm-wh-0001-0004-000000000004",
+      "name": "Ignorar"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message_type }}",
+                    "rightValue": "incoming",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "check-incoming"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Entrando"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "check-outgoing",
+                    "leftValue": "={{ $json.message_type }}",
+                    "rightValue": "outgoing",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Saindo"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-880, 40],
+      "id": "hsm-wh-0001-0005-000000000005",
+      "name": "Switch"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [-880, 320],
+      "id": "hsm-wh-0001-0006-000000000006",
+      "name": "Ignorar Outgoing"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Edit Fields').item.json.message }}",
+        "options": {
+          "systemMessage": "## Identidade e Objetivo\n\nVocê é um agente de atendimento virtual do **Hospital Santa Mônica**, referência em saúde mental em São Paulo desde 1969, com certificação ONA 3 Ouro. Seu papel é realizar a **triagem inicial** das conversas recebidas via chat, coletando as informações necessárias de forma amigável, empática e organizada, antes de transferir o atendimento para um humano.\n\nSeja sempre cordial, claro e objetivo. Não responda perguntas clínicas, médicas ou administrativas específicas — seu foco é apenas **coletar dados de triagem**.\n\n---\n\n## Fluxo de Triagem\n\nSiga **rigorosamente** a sequência abaixo, uma etapa por vez. Só avance para a próxima etapa após obter a resposta da etapa atual.\n\n---\n\n### ETAPA 0 — Saudação Inicial + Coleta de E-mail\n\nInicie sempre com uma saudação calorosa, apresente-se e solicite o e-mail do contato.\n\n**Mensagem sugerida:**\n> \"Olá! Seja bem-vindo(a) ao Hospital Santa Mônica. Eu sou o assistente virtual e vou te ajudar com seu atendimento.\n> Para começar, poderia me informar o seu **e-mail**? Assim consigo verificar se já temos um histórico de atendimento para você.\"\n\n> Aguarde o e-mail antes de prosseguir.\n> Valide se o formato do e-mail é válido. Se não for, peça novamente gentilmente.\n\n---\n\n### ETAPA 0.5 — Verificação de Histórico (Tool)\n\nApós receber o e-mail, chame a tool **Conversa existe** passando o `email` informado.\n\n**Cenário A — Tool retornou dados:**\nExiba uma mensagem de confirmação com o que foi encontrado:\n\n> \"Encontrei um cadastro vinculado ao seu e-mail!\n> Aqui estão os dados que temos:\n>\n> Nome: {contact_name}\n> Último assunto: {assunto}\n> Forma de internação: {forma_internacao}\n>\n> Gostaria de **continuar com esses dados** ou prefere\n> iniciar um **novo atendimento**?\"\n\n- Continuar → pré-preenche os campos já conhecidos e pula as etapas já respondidas\n- Novo atendimento → inicia do zero, cria novo registro\n\n**Cenário B — Tool não retornou dados:**\nProsseguir direto para a Etapa 2 sem mencionar histórico.\n\n---\n\n### ETAPA 2 — Assunto da Conversa\n\n**Pergunta sugerida:**\n> \"Qual é o assunto do seu contato hoje?\"\n\n**Opções:**\n- 1. Internação → `internacao`\n- 2. Consulta → `consulta`\n- 3. Informação do Paciente → `informacao_paciente`\n- 4. Administrativo → `administrativo`\n- 5. Outros Assuntos → `outros`\n\n---\n\n### ETAPA 3 — Para Quem é a Solicitação\n\n**Pergunta sugerida:**\n> \"Essa solicitação é para quem?\"\n\n**Opções:**\n- 1. Você Mesmo(a) → `voce_mesmo`\n- 2. Familiar → `familiar`\n- 3. Amigo(a) → `amigo`\n\n---\n\n### ETAPA 4 — Quem é o Contato\n\n**Pergunta sugerida:**\n> \"Como você se identifica em relação ao Hospital Santa Mônica?\"\n\n**Opções:**\n- 1. Lead → `lead`\n- 2. Ex-Paciente → `ex_paciente`\n- 3. Responsável pelo Lead → `responsavel_lead`\n- 4. Responsável pelo Ex-Paciente → `responsavel_ex_paciente`\n- 5. Parceiro → `parceiro`\n\n---\n\n### ETAPA 5 — Confirmação de Ex-Paciente\n\n**Aplicável apenas se:** `tipo_contato` = `ex_paciente` ou `responsavel_ex_paciente`\n\n**Pergunta sugerida:**\n> \"A pessoa sobre quem você está entrando em contato já foi paciente do Hospital Santa Mônica anteriormente?\"\n\n- Sim → `ex_paciente = true`\n- Não → `ex_paciente = false`\n\n> Se não se aplicar (Lead, Responsável pelo Lead, Parceiro), registrar automaticamente `ex_paciente = false` e pular para a Etapa 6.\n\n---\n\n### ETAPA 6 — Forma de Internação\n\n**Aplicável apenas se:** `assunto` = `internacao`\n\n> Se o assunto for outro, registrar `forma_internacao = null` e `plano_saude = null` e avançar direto para o Transbordo.\n\n**Pergunta sugerida:**\n> \"Qual será a forma de pagamento / cobertura para a internação?\"\n\n**Opções:**\n- 1. Plano de Saúde → `plano_de_saude`\n- 2. Particular → `particular`\n- 3. Não Sabe → `nao_sabe`\n\n---\n\n### ETAPA 7 — Plano de Saúde\n\n**Aplicável apenas se:** `forma_internacao` = `plano_de_saude`\n\n> Se for `particular` ou `nao_sabe`, registrar `plano_saude = null` e avançar para a Etapa 8.\n\n**Pergunta sugerida:**\n> \"Qual é o plano de saúde do paciente?\"\n\n**Opções:**\n- 1. Amil → `amil`\n- 2. Bradesco Saúde → `bradesco_saude`\n- 3. Omint → `omint`\n- 4. Prevent Sênior → `prevent_senior`\n- 5. SulAmérica → `sulamerica`\n\n---\n\n### ETAPA 8 — Carteirinha do Paciente\n\n**Aplicável apenas se:** `forma_internacao` = `plano_de_saude`\n\n**Mensagem sugerida:**\n> \"Para darmos continuidade ao atendimento, precisamos validar o plano de saúde. Você poderia enviar uma **foto da carteirinha** do plano de saúde do paciente?\"\n\n- Imagem recebida → `carteirinha_enviada = true` | salvar URL em `carteirinha_url`\n- Não enviada → `carteirinha_enviada = false` | `carteirinha_url = null`\n\n> Se o contato não conseguir enviar, diga: *\"Sem problema! Nosso atendente poderá solicitar a carteirinha durante o atendimento.\"* e avance para o Transbordo.\n\n---\n\n## Transbordo para Atendente Humano\n\nAo concluir todas as etapas aplicáveis, envie a mensagem de encerramento e retorne o JSON estruturado.\n\n**Mensagem de encerramento:**\n> \"Perfeito! Já coletei todas as informações necessárias. Agora vou transferir você para um dos nossos atendentes, que irá continuar o atendimento. Por favor, aguarde um momento.\"\n\n---\n\n## Output Estruturado — JSON Final\n\nAo encerrar a triagem, retorne **obrigatoriamente** o seguinte JSON com os dados coletados. Este JSON será usado pelo N8N para salvar no Supabase e acionar o transbordo no Chatwoot.\n\nRetorne o JSON em mensagem SEPARADA, SOZINHA, sem NENHUMA formatação:\n- Sem bloco de código (sem ```)\n- Sem a palavra json antes\n- Sem \\n dentro do JSON\n- Sem texto antes ou depois\n- Apenas o JSON puro em uma linha só\n\nExemplo exato do formato esperado:\n{\"triagem_concluida\": true, \"transbordado\": false, \"contact_name\": \"\", \"contact_email\": \"\", \"conversation_id\": \"\", \"assunto\": \"internacao\", \"para_quem\": \"familiar\", \"tipo_contato\": \"lead\", \"ex_paciente\": false, \"forma_internacao\": \"particular\", \"plano_saude\": null, \"carteirinha_enviada\": false, \"carteirinha_url\": null}\n\n**Regras do JSON:**\n- Use sempre os valores em `snake_case` conforme definido em cada etapa\n- Campos não aplicáveis devem ser retornados como `null` — nunca omita campos\n- `transbordado` deve ser sempre `false` aqui — o N8N atualiza para `true` após o transbordo\n- `conversation_id` deve ser o ID da conversa ativa no Chatwoot\n- Nunca invente valores — apenas registre o que o contato respondeu\n\n---\n\n## Regras Gerais do Agente\n\n- Não responda perguntas médicas, clínicas ou de diagnóstico\n- Não forneça informações sobre valores, convênios ou procedimentos específicos\n- Colete os dados em sequência, sem pular etapas (exceto as condicionais)\n- Confirme a informação recebida antes de avançar\n- Transborde para humano ao final da triagem ou se o contato solicitar a qualquer momento\n- Use linguagem simples, empática e respeitosa\n- Se a resposta estiver fora das opções, peça gentilmente para o contato escolher uma das alternativas disponíveis\n- Se o contato pedir para falar com um humano antes de concluir a triagem, registre os dados já coletados com `triagem_concluida = false` e acione o transbordo imediatamente"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [-528, 40],
+      "id": "hsm-wh-0001-0007-000000000007",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [-528, 320],
+      "id": "hsm-wh-0001-0008-000000000008",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "CONFIGURE_AQUI",
+          "name": "OpenAI Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Edit Fields').item.json.conversation_id }}chat",
+        "contextWindowLength": 15
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [-384, 320],
+      "id": "hsm-wh-0001-0009-000000000009",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "CONFIGURE_AQUI",
+          "name": "Postgres HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "triagem_hsm",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "conversation_id",
+              "fieldValue": "={{ $json.conversation_id }}"
+            },
+            {
+              "fieldId": "contact_name",
+              "fieldValue": "={{ $json.name }}"
+            },
+            {
+              "fieldId": "assunto",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('assunto', ``, 'string') }}"
+            },
+            {
+              "fieldId": "para_quem",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('para_quem', ``, 'string') }}"
+            },
+            {
+              "fieldId": "tipo_contato",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('tipo_contato', ``, 'string') }}"
+            },
+            {
+              "fieldId": "ex_paciente",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('ex_paciente', ``, 'string') }}"
+            },
+            {
+              "fieldId": "forma_internacao",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('forma_internacao', ``, 'string') }}"
+            },
+            {
+              "fieldId": "plano_saude",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('plano_saude', ``, 'string') }}"
+            },
+            {
+              "fieldId": "carteirinha_enviada",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('carteirinha_enviada', ``, 'string') }}"
+            },
+            {
+              "fieldId": "carteirinha_url",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('carteirinha_url', ``, 'string') }}"
+            },
+            {
+              "fieldId": "etapa_atual",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('etapa_atual', ``, 'string') }}"
+            },
+            {
+              "fieldId": "triagem_concluida",
+              "fieldValue": "=true"
+            },
+            {
+              "fieldId": "transbordado",
+              "fieldValue": "=true"
+            },
+            {
+              "fieldId": "message_id",
+              "fieldValue": "={{ $json.message_id }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $json.email }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $json.phone }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabaseTool",
+      "typeVersion": 1,
+      "position": [-176, 320],
+      "id": "hsm-wh-0001-0010-000000000010",
+      "name": "Triagem",
+      "credentials": {
+        "supabaseApi": {
+          "id": "CONFIGURE_AQUI",
+          "name": "Supabase HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "triagem_hsm",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('email_busca', `Esse é o email informado pelo usuário.`, 'string') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabaseTool",
+      "typeVersion": 1,
+      "position": [0, 320],
+      "id": "hsm-wh-0001-0011-000000000011",
+      "name": "Conversa existe",
+      "credentials": {
+        "supabaseApi": {
+          "id": "CONFIGURE_AQUI",
+          "name": "Supabase HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const mensagem = $json.output || \"\";\n\nconst partes = mensagem.split(\"\\n\\n\");\n\nreturn partes.map(parte => ({\n  json: { texto: parte.trim() }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-176, 40],
+      "id": "hsm-wh-0001-0012-000000000012",
+      "name": "Quebrar Parágrafos"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "check-json-triagem",
+              "leftValue": "={{ $json.texto }}",
+              "rightValue": "triagem_concluida",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [40, 40],
+      "id": "hsm-wh-0001-0013-000000000013",
+      "name": "É JSON de triagem?"
+    },
+    {
+      "parameters": {
+        "jsCode": "let texto = $json.texto || \"\";\n\n// Remove bloco markdown se vier\ntexto = texto.replace(/```json/g, \"\").replace(/```/g, \"\").trim();\n\nconst triagem = JSON.parse(texto);\n\nreturn [{ json: triagem }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, -60],
+      "id": "hsm-wh-0001-0014-000000000014",
+      "name": "Parse JSON Triagem"
+    },
+    {
+      "parameters": {
+        "tableId": "triagem_hsm",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $json.contact_email }}"
+            },
+            {
+              "fieldId": "contact_name",
+              "fieldValue": "={{ $('Edit Fields').item.json.name }}"
+            },
+            {
+              "fieldId": "conversation_id",
+              "fieldValue": "={{ $('Edit Fields').item.json.conversation_id }}"
+            },
+            {
+              "fieldId": "message_id",
+              "fieldValue": "={{ $('Edit Fields').item.json.message_id }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $('Edit Fields').item.json.phone }}"
+            },
+            {
+              "fieldId": "assunto",
+              "fieldValue": "={{ $json.assunto }}"
+            },
+            {
+              "fieldId": "para_quem",
+              "fieldValue": "={{ $json.para_quem }}"
+            },
+            {
+              "fieldId": "tipo_contato",
+              "fieldValue": "={{ $json.tipo_contato }}"
+            },
+            {
+              "fieldId": "ex_paciente",
+              "fieldValue": "={{ $json.ex_paciente }}"
+            },
+            {
+              "fieldId": "forma_internacao",
+              "fieldValue": "={{ $json.forma_internacao }}"
+            },
+            {
+              "fieldId": "plano_saude",
+              "fieldValue": "={{ $json.plano_saude }}"
+            },
+            {
+              "fieldId": "carteirinha_enviada",
+              "fieldValue": "={{ $json.carteirinha_enviada }}"
+            },
+            {
+              "fieldId": "carteirinha_url",
+              "fieldValue": "={{ $json.carteirinha_url }}"
+            },
+            {
+              "fieldId": "transbordado",
+              "fieldValue": "=true"
+            },
+            {
+              "fieldId": "triagem_concluida",
+              "fieldValue": "={{ $json.triagem_concluida }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [580, -60],
+      "id": "hsm-wh-0001-0015-000000000015",
+      "name": "Salvar Triagem",
+      "credentials": {
+        "supabaseApi": {
+          "id": "CONFIGURE_AQUI",
+          "name": "Supabase HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [580, 180],
+      "id": "hsm-wh-0001-0016-000000000016",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [860, 100],
+      "id": "hsm-wh-0001-0017-000000000017",
+      "name": "Fim do Loop"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://chatwoot-t7i7rjvs1n1dk406ji1twbjp.187.127.17.157.sslip.io/api/v1/accounts/1/conversations/{{ $('Edit Fields').item.json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.texto }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 320],
+      "id": "hsm-wh-0001-0018-000000000018",
+      "name": "Enviar Mensagem Chatwoot",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURE_AQUI",
+          "name": "Chatwoot API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 1.5
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1080, 320],
+      "id": "hsm-wh-0001-0019-000000000019",
+      "name": "Wait",
+      "webhookId": "hsm-wait-triagem"
+    }
+  ],
+  "connections": {
+    "Webhook Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Já transbordou?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Já transbordou?": {
+      "main": [
+        [
+          {
+            "node": "Ignorar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignorar Outgoing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Triagem": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversa existe": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Quebrar Parágrafos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quebrar Parágrafos": {
+      "main": [
+        [
+          {
+            "node": "É JSON de triagem?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "É JSON de triagem?": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON Triagem": {
+      "main": [
+        [
+          {
+            "node": "Salvar Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Fim do Loop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar Mensagem Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Mensagem Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "HSM",
+      "id": "1"
+    },
+    {
+      "name": "Triagem",
+      "id": "2"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-13T16:00:00.000Z",
+  "versionId": "hsm-triagem-v3-final"
+}

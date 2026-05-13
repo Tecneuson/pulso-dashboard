@@ -2,11 +2,11 @@
 
 import { useDraggable } from '@dnd-kit/core'
 import { Clock, AlertTriangle } from 'lucide-react'
-import type { ContactWithPlan } from '@/types'
+import type { Triagem } from '@/types'
 import { Badge } from '@/components/ui'
 
 interface KanbanCardProps {
-  contact: ContactWithPlan
+  triagem: Triagem
   onClick?: () => void
   isDragOverlay?: boolean
 }
@@ -26,20 +26,30 @@ function getTimeColor(isoDate: string): string {
   return 'text-danger-500'
 }
 
-const contactTypeLabels: Record<string, string> = {
+const tipoContatoLabels: Record<string, string> = {
   lead: 'Lead',
   ex_paciente: 'Ex-paciente',
   responsavel: 'Responsável',
-  medico: 'Médico',
+  responsavel_lead: 'Resp. lead',
+  responsavel_ex_paciente: 'Resp. ex-paciente',
   parceiro: 'Parceiro',
 }
 
-export function KanbanCard({ contact, onClick, isDragOverlay }: KanbanCardProps) {
+const planoLabels: Record<string, string> = {
+  amil: 'Amil',
+  bradesco_saude: 'Bradesco Saúde',
+  omint: 'Omint',
+  prevent_senior: 'Prevent Sênior',
+  sulamerica: 'SulAmérica',
+}
+
+export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: contact.id,
+    id: triagem.id,
   })
 
-  const isUrgent = contact.notes?.toLowerCase().includes('urgente')
+  const isUrgent = triagem.observacoes?.toLowerCase().includes('urgente') ||
+    triagem.observacoes?.toLowerCase().includes('crise')
 
   const style = transform
     ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
@@ -55,26 +65,32 @@ export function KanbanCard({ contact, onClick, isDragOverlay }: KanbanCardProps)
         isDragging ? 'opacity-30' : ''
       } ${isDragOverlay ? 'shadow-elevated rotate-2' : ''}`}
     >
-      {/* Top row — badge + time */}
       <div className="flex items-center justify-between mb-2">
         <Badge variant="default" className="text-[11px]">
-          {contactTypeLabels[contact.contact_type] ?? contact.contact_type}
+          {triagem.tipo_contato
+            ? tipoContatoLabels[triagem.tipo_contato] ?? triagem.tipo_contato
+            : 'Lead'}
         </Badge>
-        <span className={`flex items-center gap-1 text-[11px] font-mono tabular-nums ${getTimeColor(contact.funnel_stage_changed_at)}`}>
+        <span
+          className={`flex items-center gap-1 text-[11px] font-mono tabular-nums ${getTimeColor(triagem.updated_at)}`}
+        >
           <Clock size={10} />
-          {formatDuration(contact.funnel_stage_changed_at)}
+          {formatDuration(triagem.updated_at)}
         </span>
       </div>
 
-      {/* Name */}
-      <p className="text-sm font-medium text-content-primary truncate">{contact.name}</p>
-
-      {/* Health plan */}
-      <p className="text-[13px] text-content-secondary truncate mt-0.5">
-        {contact.health_plan?.name ?? 'Sem convênio'}
+      <p className="text-sm font-medium text-content-primary truncate">
+        {triagem.contact_name ?? 'Sem nome'}
       </p>
 
-      {/* Bottom row — tags + agent */}
+      <p className="text-[13px] text-content-secondary truncate mt-0.5">
+        {triagem.plano_saude
+          ? planoLabels[triagem.plano_saude] ?? triagem.plano_saude
+          : triagem.forma_internacao === 'particular'
+          ? 'Particular'
+          : 'Sem convênio'}
+      </p>
+
       <div className="flex items-center gap-1.5 mt-2">
         {isUrgent && (
           <Badge variant="danger" className="text-[10px] gap-0.5">

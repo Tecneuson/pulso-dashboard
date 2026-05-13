@@ -14,7 +14,6 @@ import {
   ChevronRight,
   LogOut,
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import type { DashboardUser } from '@/types'
 
 const navItems = [
@@ -34,9 +33,7 @@ export function Sidebar({ user }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
 
-  async function handleLogout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+  function handleLogout() {
     window.location.href = '/login'
   }
 

@@ -13,21 +13,33 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { FUNNEL_STAGES } from '@/types'
-import type { ContactWithPlan, FunnelStage } from '@/types'
-import { groupByStage } from '@/lib/mock-data'
+import { ESTAGIO_FUNIL } from '@/types'
+import type { Triagem, EstagioFunil } from '@/types'
 import { KanbanColumn } from './column'
 import { KanbanCard } from './card'
 
-interface KanbanBoardProps {
-  contacts: ContactWithPlan[]
-  onStageChange?: (contactId: string, newStage: FunnelStage) => void
-  onCardClick?: (contact: ContactWithPlan) => void
+function groupByStage(triagens: Triagem[]): Record<EstagioFunil, Triagem[]> {
+  const init = ESTAGIO_FUNIL.reduce(
+    (acc, s) => ({ ...acc, [s]: [] }),
+    {} as Record<EstagioFunil, Triagem[]>
+  )
+  for (const t of triagens) {
+    const stage = (t.estagio_funil ?? 'novo_contato') as EstagioFunil
+    if (init[stage]) init[stage].push(t)
+    else init.novo_contato.push(t)
+  }
+  return init
 }
 
-export function KanbanBoard({ contacts, onStageChange, onCardClick }: KanbanBoardProps) {
-  const [items, setItems] = useState(() => groupByStage(contacts))
-  const [activeContact, setActiveContact] = useState<ContactWithPlan | null>(null)
+interface KanbanBoardProps {
+  triagens: Triagem[]
+  onStageChange?: (id: string, newStage: EstagioFunil) => void
+  onCardClick?: (triagem: Triagem) => void
+}
+
+export function KanbanBoard({ triagens, onStageChange, onCardClick }: KanbanBoardProps) {
+  const [items, setItems] = useState(() => groupByStage(triagens))
+  const [active, setActive] = useState<Triagem | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -35,42 +47,39 @@ export function KanbanBoard({ contacts, onStageChange, onCardClick }: KanbanBoar
   )
 
   function handleDragStart(event: DragStartEvent) {
-    const contact = contacts.find((c) => c.id === event.active.id)
-    if (contact) setActiveContact(contact)
+    const t = triagens.find((x) => x.id === event.active.id)
+    if (t) setActive(t)
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    setActiveContact(null)
+    setActive(null)
     const { active, over } = event
     if (!over) return
 
-    const contactId = active.id as string
-    const targetStage = over.id as FunnelStage
+    const id = active.id as string
+    const target = over.id as EstagioFunil
 
-    // Find current stage
-    let sourceStage: FunnelStage | null = null
-    for (const stage of FUNNEL_STAGES) {
-      if (items[stage].some((c) => c.id === contactId)) {
-        sourceStage = stage
+    let source: EstagioFunil | null = null
+    for (const s of ESTAGIO_FUNIL) {
+      if (items[s].some((t) => t.id === id)) {
+        source = s
         break
       }
     }
 
-    if (!sourceStage || sourceStage === targetStage) return
+    if (!source || source === target) return
 
-    // Move contact between stages
     setItems((prev) => {
-      const contact = prev[sourceStage!].find((c) => c.id === contactId)
-      if (!contact) return prev
-
+      const t = prev[source!].find((x) => x.id === id)
+      if (!t) return prev
       return {
         ...prev,
-        [sourceStage!]: prev[sourceStage!].filter((c) => c.id !== contactId),
-        [targetStage]: [...prev[targetStage], { ...contact, funnel_stage: targetStage }],
+        [source!]: prev[source!].filter((x) => x.id !== id),
+        [target]: [...prev[target], { ...t, estagio_funil: target }],
       }
     })
 
-    onStageChange?.(contactId, targetStage)
+    onStageChange?.(id, target)
   }
 
   return (
@@ -81,14 +90,17 @@ export function KanbanBoard({ contacts, onStageChange, onCardClick }: KanbanBoar
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-4 min-h-[calc(100vh-10rem)]">
-        {FUNNEL_STAGES.map((stage) => (
-          <KanbanColumn key={stage} stage={stage} contacts={items[stage]} onCardClick={onCardClick} />
+        {ESTAGIO_FUNIL.map((stage) => (
+          <KanbanColumn
+            key={stage}
+            stage={stage}
+            triagens={items[stage]}
+            onCardClick={onCardClick}
+          />
         ))}
       </div>
 
-      <DragOverlay>
-        {activeContact && <KanbanCard contact={activeContact} isDragOverlay />}
-      </DragOverlay>
+      <DragOverlay>{active && <KanbanCard triagem={active} isDragOverlay />}</DragOverlay>
     </DndContext>
   )
 }

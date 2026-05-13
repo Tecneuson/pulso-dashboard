@@ -1,13 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 
-export default async function Home() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (user) {
-    redirect('/kanban')
-  } else {
-    redirect('/login')
-  }
+export default function Home() {
+  redirect('/dashboard')
 }

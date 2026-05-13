@@ -1,11 +1,11 @@
 'use client'
 
 import { useDroppable } from '@dnd-kit/core'
-import type { ContactWithPlan, FunnelStage } from '@/types'
-import { FUNNEL_STAGE_LABELS } from '@/types'
+import type { Triagem, EstagioFunil } from '@/types'
+import { ESTAGIO_FUNIL_LABELS } from '@/types'
 import { KanbanCard } from './card'
 
-const stageColors: Record<FunnelStage, string> = {
+const stageColors: Record<EstagioFunil, string> = {
   novo_contato: 'bg-neutral-500',
   atendendo: 'bg-info-500',
   consultando_convenio: 'bg-warning-500',
@@ -17,12 +17,12 @@ const stageColors: Record<FunnelStage, string> = {
 }
 
 interface KanbanColumnProps {
-  stage: FunnelStage
-  contacts: ContactWithPlan[]
-  onCardClick?: (contact: ContactWithPlan) => void
+  stage: EstagioFunil
+  triagens: Triagem[]
+  onCardClick?: (triagem: Triagem) => void
 }
 
-export function KanbanColumn({ stage, contacts, onCardClick }: KanbanColumnProps) {
+export function KanbanColumn({ stage, triagens, onCardClick }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage })
 
   return (
@@ -32,24 +32,22 @@ export function KanbanColumn({ stage, contacts, onCardClick }: KanbanColumnProps
         isOver ? 'bg-surface-tertiary/50' : ''
       }`}
     >
-      {/* Column header */}
       <div className="flex items-center gap-2 px-2 py-2.5 mb-1">
         <div className={`w-2 h-2 rounded-full ${stageColors[stage]}`} />
         <h3 className="text-[13px] font-medium text-content-primary truncate">
-          {FUNNEL_STAGE_LABELS[stage]}
+          {ESTAGIO_FUNIL_LABELS[stage]}
         </h3>
         <span className="text-xs font-mono text-content-tertiary tabular-nums ml-auto">
-          {contacts.length}
+          {triagens.length}
         </span>
       </div>
 
-      {/* Cards */}
       <div className="flex-1 space-y-2 px-1 min-h-[200px]">
-        {contacts.map((contact) => (
+        {triagens.map((triagem) => (
           <KanbanCard
-            key={contact.id}
-            contact={contact}
-            onClick={() => onCardClick?.(contact)}
+            key={triagem.id}
+            triagem={triagem}
+            onClick={() => onCardClick?.(triagem)}
           />
         ))}
       </div>

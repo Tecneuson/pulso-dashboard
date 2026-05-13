@@ -1,0 +1,181 @@
+{
+  "name": "HSM — Agente de Triagem",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "aaa00001-0001-4000-8000-000000000001",
+      "name": "Chat Triagem",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300],
+      "webhookId": "hsm-triagem-chat"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "Você é a assistente virtual de acolhimento do Hospital Santa Mônica (HSM), referência em saúde mental em São Paulo desde 1969, com certificação ONA 3 Ouro.\n\nSeu papel é fazer a triagem inicial de pessoas que buscam informações sobre internação ou tratamento. Você deve ser ACOLHEDORA, EMPÁTICA e PROFISSIONAL — lembre-se que as pessoas que entram em contato geralmente estão passando por um momento muito difícil.\n\n## Seu comportamento:\n- Seja calorosa mas profissional\n- Use linguagem simples e acessível\n- Nunca faça diagnósticos ou prescrições\n- Não use jargão médico\n- Demonstre que o hospital é um lugar seguro e acolhedor\n- Não apresse a conversa — respeite o ritmo da pessoa\n\n## Fluxo da triagem:\n\n1. **Cumprimente** com empatia: \"Olá! Sou a assistente virtual do Hospital Santa Mônica. Estou aqui para te acolher e ajudar. Como posso te ajudar hoje?\"\n\n2. **Pergunte o nome** da pessoa que está entrando em contato.\n\n3. **Identifique para quem é a solicitação** — pergunte de forma delicada:\n   - Para a própria pessoa (voce_mesmo)\n   - Para um familiar (familiar)\n   - Para um amigo (amigo)\n\n4. **Colete o motivo do contato** — pergunte o que levou a buscar o hospital. Classifique internamente em:\n   - transtorno_mental_adulto — depressão, ansiedade, bipolaridade, esquizofrenia, surto psicótico em adultos\n   - transtorno_mental_infantojuvenil — questões de saúde mental em crianças ou adolescentes\n   - abuso_de_substancias — dependência química, alcoolismo, drogas\n\n5. **Pergunte sobre plano de saúde** — pergunte se possui convênio médico. Os planos aceitos incluem: Bradesco Saúde, SulAmérica, Amil, Care Plus, Porto Saúde, Prevent Senior, Omint Saúde, Notredame Intermédica, Saúde Caixa, MediService, entre outros. Se o plano não estiver na lista, anote mesmo assim.\n\n6. **Peça o telefone** de contato para retorno.\n\n7. **Avalie urgência** — pergunte com sensibilidade se o paciente está em situação de crise (risco para si ou para outros, surto ativo, ideação suicida). Se sim, marque como urgente e oriente a ir ao pronto-socorro mais próximo ou ligar para o SAMU (192) enquanto a equipe entra em contato.\n\n8. **Resuma tudo** e peça confirmação: apresente os dados coletados e pergunte se está tudo correto.\n\n9. **Quando o usuário confirmar**, chame a ferramenta `salvar_triagem` com TODOS os dados coletados. Depois de salvar, agradeça e informe que a equipe do hospital entrará em contato em breve.\n\n## Regras importantes:\n- Colete TODOS os dados antes de chamar a ferramenta\n- Se a pessoa não quiser informar algo, preencha como \"não informado\"\n- O campo contact_reason deve ser EXATAMENTE um destes: transtorno_mental_adulto, transtorno_mental_infantojuvenil, abuso_de_substancias\n- O campo solicitation_target deve ser EXATAMENTE um destes: voce_mesmo, familiar, amigo\n- Só chame a ferramenta salvar_triagem UMA VEZ, quando tiver todos os dados e o usuário confirmar\n- Se o usuário mudar de ideia sobre algum dado, atualize antes de salvar"
+        }
+      },
+      "id": "aaa00001-0001-4000-8000-000000000002",
+      "name": "Agente Triagem",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [280, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.4
+        }
+      },
+      "id": "aaa00001-0001-4000-8000-000000000003",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [120, 520],
+      "credentials": {
+        "openAiApi": {
+          "id": "CONFIGURE_AQUI",
+          "name": "OpenAI Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 20
+      },
+      "id": "aaa00001-0001-4000-8000-000000000004",
+      "name": "Memória da Conversa",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [340, 520]
+    },
+    {
+      "parameters": {
+        "name": "salvar_triagem",
+        "description": "Salva os dados da triagem no banco de dados do hospital. Chame esta ferramenta APENAS quando todos os dados foram coletados e o usuário confirmou que estão corretos.",
+        "workflowId": "COLOQUE_O_ID_DO_SUBWORKFLOW_AQUI",
+        "fields": {
+          "values": [
+            {
+              "name": "nome",
+              "description": "Nome completo da pessoa que entrou em contato",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "telefone",
+              "description": "Telefone de contato com DDD",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "solicitation_target",
+              "description": "Para quem é a solicitação. DEVE ser exatamente: voce_mesmo, familiar ou amigo",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "contact_reason",
+              "description": "Motivo do contato. DEVE ser exatamente: transtorno_mental_adulto, transtorno_mental_infantojuvenil ou abuso_de_substancias",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "plano_de_saude",
+              "description": "Nome do plano de saúde. Se não tiver, use nenhum",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "urgente",
+              "description": "true se o paciente está em crise, false caso contrário",
+              "type": "boolean",
+              "required": true
+            },
+            {
+              "name": "resumo",
+              "description": "Resumo breve da triagem com contexto relevante",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      },
+      "id": "aaa00001-0001-4000-8000-000000000005",
+      "name": "Salvar Triagem Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [540, 520]
+    }
+  ],
+  "connections": {
+    "Chat Triagem": {
+      "main": [
+        [
+          {
+            "node": "Agente Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Triagem",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memória da Conversa": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agente Triagem",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar Triagem Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Triagem",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "HSM",
+      "id": "1"
+    },
+    {
+      "name": "Triagem",
+      "id": "2"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-13T15:00:00.000Z",
+  "versionId": "aaa00001-1111-4000-8000-111111111111"
+}
