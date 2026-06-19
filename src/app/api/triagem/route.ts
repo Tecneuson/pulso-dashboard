@@ -64,11 +64,6 @@ export async function PATCH(request: NextRequest) {
       const contactAttrs = contactAttrsFromTriagem(patch as Partial<Triagem>)
       const convAttrs = conversationAttrsFromTriagem(patch as Partial<Triagem>)
 
-      console.log(
-        '[sync->chatwoot]',
-        JSON.stringify({ convId, contactId, patchKeys: Object.keys(patch), contactAttrs, convAttrs })
-      )
-
       if (contactId && Object.keys(contactAttrs).length) {
         await updateContactCustomAttributes(contactId, contactAttrs, conv.meta?.sender?.custom_attributes)
       }
