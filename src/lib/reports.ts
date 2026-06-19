@@ -28,7 +28,7 @@ export function weeklyConversion(triagens: Triagem[], weeks = 8) {
     buckets.push({
       week: start.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
       total: inWeek.length,
-      internados: inWeek.filter((t) => t.estagio_funil === 'internacao_confirmada').length,
+      internados: inWeek.filter((t) => t.estagio_funil === 'internado').length,
       perdidos: inWeek.filter((t) => t.estagio_funil === 'recusou_internacao').length,
     })
   }
@@ -126,7 +126,7 @@ export function avgFunnelTimeMinutes(triagens: Triagem[]) {
 export function summaryStats(triagens: Triagem[]) {
   const concluidas = triagens.filter((t) => t.triagem_concluida).length
   const transbordadas = triagens.filter((t) => t.transbordado).length
-  const internados = triagens.filter((t) => t.estagio_funil === 'internacao_confirmada').length
+  const internados = triagens.filter((t) => t.estagio_funil === 'internado').length
   const perdidos = triagens.filter((t) => t.estagio_funil === 'recusou_internacao').length
   const ativos = triagens.length - internados - perdidos
 

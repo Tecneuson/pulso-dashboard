@@ -2,13 +2,26 @@
 
 import { useDraggable } from '@dnd-kit/core'
 import { Clock, AlertTriangle } from 'lucide-react'
-import type { Triagem } from '@/types'
+import type { Triagem, EstagioFunil } from '@/types'
 import { Badge } from '@/components/ui'
 
 interface KanbanCardProps {
   triagem: Triagem
   onClick?: () => void
   isDragOverlay?: boolean
+}
+
+const STAGE_VAR: Record<EstagioFunil, string> = {
+  em_atendimento: 'var(--stage-atendendo)',
+  convenio_nao_legivel: 'var(--stage-consultando)',
+  convenio_legivel: 'var(--stage-autorizado)',
+  em_avaliacao_hsm: 'var(--stage-a-caminho)',
+  vaga_cedida: 'var(--stage-recepcao)',
+  vaga_recusada_medico: 'var(--stage-recusou)',
+  recusou_origem: 'var(--stage-recusou)',
+  recusou_internacao: 'var(--stage-recusou)',
+  sem_condicoes_financeiras: 'var(--stage-novo)',
+  internado: 'var(--stage-confirmado)',
 }
 
 function formatDuration(isoDate: string): string {
@@ -48,12 +61,17 @@ export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps)
     id: triagem.id,
   })
 
-  const isUrgent = triagem.observacoes?.toLowerCase().includes('urgente') ||
+  const isUrgent =
+    triagem.observacoes?.toLowerCase().includes('urgente') ||
     triagem.observacoes?.toLowerCase().includes('crise')
 
-  const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
-    : undefined
+  const stage = (triagem.estagio_funil ?? 'em_atendimento') as EstagioFunil
+  const accent = isUrgent ? 'var(--stage-recusou)' : STAGE_VAR[stage]
+
+  const style: React.CSSProperties = {
+    borderLeftColor: accent,
+    ...(transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : {}),
+  }
 
   return (
     <div
@@ -61,12 +79,14 @@ export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps)
       style={style}
       {...(!isDragOverlay ? { ...attributes, ...listeners } : {})}
       onClick={onClick}
-      className={`bg-surface-secondary border border-border rounded-lg p-3 shadow-card cursor-grab active:cursor-grabbing transition-all duration-150 hover:border-border-hover hover:shadow-card-hover hover:-translate-y-px ${
+      className={`bg-surface-secondary border border-border border-l-[3px] rounded-lg p-3 shadow-card cursor-grab active:cursor-grabbing transition-[transform,box-shadow,border-color] duration-150 hover:border-border-hover hover:shadow-card-hover hover:-translate-y-px ${
         isDragging ? 'opacity-30' : ''
-      } ${isDragOverlay ? 'shadow-elevated rotate-2' : ''}`}
+      } ${isDragOverlay ? 'shadow-elevated scale-[1.02] cursor-grabbing' : ''} ${
+        isUrgent ? 'ring-1 ring-danger-500/30' : ''
+      }`}
     >
       <div className="flex items-center justify-between mb-2">
-        <Badge variant="default" className="text-[11px]">
+        <Badge variant="default" className="text-[11px] px-1.5">
           {triagem.tipo_contato
             ? tipoContatoLabels[triagem.tipo_contato] ?? triagem.tipo_contato
             : 'Lead'}
@@ -91,14 +111,14 @@ export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps)
           : 'Sem convênio'}
       </p>
 
-      <div className="flex items-center gap-1.5 mt-2">
-        {isUrgent && (
-          <Badge variant="danger" className="text-[10px] gap-0.5">
+      {isUrgent && (
+        <div className="flex items-center gap-1.5 mt-2">
+          <Badge variant="danger" className="text-[10px] px-1.5">
             <AlertTriangle size={10} />
             Urgente
           </Badge>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

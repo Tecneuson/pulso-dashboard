@@ -43,32 +43,43 @@ export const MOTIVO_CONTATO = [
 ] as const
 export type MotivoContato = (typeof MOTIVO_CONTATO)[number]
 
+// Funil canônico — espelha os valores de `estagio_no_funil` do Chatwoot (fonte da verdade).
 export const ESTAGIO_FUNIL = [
-  'novo_contato',
-  'atendendo',
-  'consultando_convenio',
-  'autorizado_pelo_convenio',
-  'paciente_a_caminho',
-  'hospital_recepcao',
+  'em_atendimento',
+  'convenio_nao_legivel',
+  'convenio_legivel',
+  'em_avaliacao_hsm',
+  'vaga_cedida',
+  'vaga_recusada_medico',
+  'recusou_origem',
   'recusou_internacao',
-  'internacao_confirmada',
+  'sem_condicoes_financeiras',
+  'internado',
 ] as const
 export type EstagioFunil = (typeof ESTAGIO_FUNIL)[number]
 
 export const ESTAGIO_FUNIL_LABELS: Record<EstagioFunil, string> = {
-  novo_contato: 'Novo contato',
-  atendendo: 'Atendendo',
-  consultando_convenio: 'Consultando convênio',
-  autorizado_pelo_convenio: 'Autorizado pelo convênio',
-  paciente_a_caminho: 'Paciente a caminho',
-  hospital_recepcao: 'Hospital recepção',
-  recusou_internacao: 'Recusou internação',
-  internacao_confirmada: 'Internação confirmada',
+  em_atendimento: 'Em atendimento',
+  convenio_nao_legivel: 'Convênio não legível',
+  convenio_legivel: 'Convênio legível',
+  em_avaliacao_hsm: 'Em avaliação no HSM',
+  vaga_cedida: 'Vaga cedida',
+  vaga_recusada_medico: 'Vaga recusada pelo médico HSM',
+  recusou_origem: 'Recusou a internação na origem',
+  recusou_internacao: 'Recusou a internação',
+  sem_condicoes_financeiras: 'Sem condições financeiras',
+  internado: 'Internado',
 }
 
+// Rótulos exatos no Chatwoot (atributo de contato `estagio_no_funil`), na MESMA ordem dos slugs.
+export const ESTAGIO_FUNIL_CHATWOOT: Record<EstagioFunil, string> = ESTAGIO_FUNIL_LABELS
+
 export const TERMINAL_STAGES: EstagioFunil[] = [
+  'internado',
   'recusou_internacao',
-  'internacao_confirmada',
+  'recusou_origem',
+  'vaga_recusada_medico',
+  'sem_condicoes_financeiras',
 ]
 
 export const STATUS_TRIAGEM = [
@@ -142,6 +153,63 @@ export interface DashboardUser {
   email: string
   role: 'admin' | 'manager' | 'agent' | 'viewer'
   avatar_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ============================================================
+// Pacientes — base de reativação (tabela `pacientes`)
+// ============================================================
+
+export const ESTAGIO_REATIVACAO = [
+  'nao_contatado',
+  'tentativa_contato',
+  'em_conversa',
+  'interesse',
+  'reativado',
+  'sem_interesse',
+  'nao_localizado',
+] as const
+export type EstagioReativacao = (typeof ESTAGIO_REATIVACAO)[number]
+
+export const ESTAGIO_REATIVACAO_LABELS: Record<EstagioReativacao, string> = {
+  nao_contatado: 'Não contatado',
+  tentativa_contato: 'Tentativa de contato',
+  em_conversa: 'Em conversa',
+  interesse: 'Com interesse',
+  reativado: 'Reativado',
+  sem_interesse: 'Sem interesse',
+  nao_localizado: 'Não localizado',
+}
+
+// Estágios terminais (positivo e negativos)
+export const ESTAGIO_REATIVACAO_TERMINAIS: EstagioReativacao[] = [
+  'reativado',
+  'sem_interesse',
+  'nao_localizado',
+]
+
+export interface Paciente {
+  id: string
+  identificador_cliente: number
+  nome_cliente: string
+  convenio_raw: string | null
+  convenio_normalizado: string | null
+  classificacao_cliente: string | null
+  classificacao_produto: string | null
+  identificador_produto: string | null
+  cid_codigo: string | null
+  sub_familia_produto: string | null
+  mes_rexis: string | null
+  data_emissao_max: string | null
+  data_emissao_min: string | null
+  penultima_internacao: string | null
+  estagio_reativacao: EstagioReativacao
+  responsavel_id: string | null
+  observacoes: string | null
+  tags: string[] | null
+  ultimo_contato_at: string | null
+  origem_carga: string | null
   created_at: string
   updated_at: string
 }

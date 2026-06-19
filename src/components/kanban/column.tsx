@@ -5,15 +5,17 @@ import type { Triagem, EstagioFunil } from '@/types'
 import { ESTAGIO_FUNIL_LABELS } from '@/types'
 import { KanbanCard } from './card'
 
-const stageColors: Record<EstagioFunil, string> = {
-  novo_contato: 'bg-neutral-500',
-  atendendo: 'bg-info-500',
-  consultando_convenio: 'bg-warning-500',
-  autorizado_pelo_convenio: 'bg-brand-500',
-  paciente_a_caminho: 'bg-info-500',
-  hospital_recepcao: 'bg-brand-400',
-  recusou_internacao: 'bg-danger-500',
-  internacao_confirmada: 'bg-success-500',
+const STAGE_VAR: Record<EstagioFunil, string> = {
+  em_atendimento: 'var(--stage-atendendo)',
+  convenio_nao_legivel: 'var(--stage-consultando)',
+  convenio_legivel: 'var(--stage-autorizado)',
+  em_avaliacao_hsm: 'var(--stage-a-caminho)',
+  vaga_cedida: 'var(--stage-recepcao)',
+  vaga_recusada_medico: 'var(--stage-recusou)',
+  recusou_origem: 'var(--stage-recusou)',
+  recusou_internacao: 'var(--stage-recusou)',
+  sem_condicoes_financeiras: 'var(--stage-novo)',
+  internado: 'var(--stage-confirmado)',
 }
 
 interface KanbanColumnProps {
@@ -28,16 +30,19 @@ export function KanbanColumn({ stage, triagens, onCardClick }: KanbanColumnProps
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col shrink-0 w-[280px] rounded-lg transition-colors ${
-        isOver ? 'bg-surface-tertiary/50' : ''
+      className={`flex flex-col shrink-0 w-[280px] rounded-xl transition-colors ${
+        isOver ? 'bg-surface-secondary ring-2 ring-brand-500/30' : ''
       }`}
     >
-      <div className="flex items-center gap-2 px-2 py-2.5 mb-1">
-        <div className={`w-2 h-2 rounded-full ${stageColors[stage]}`} />
-        <h3 className="text-[13px] font-medium text-content-primary truncate">
+      <div className="flex items-center gap-2 px-2.5 py-2.5 mb-1">
+        <span
+          className="w-1.5 h-1.5 rounded-full shrink-0"
+          style={{ backgroundColor: STAGE_VAR[stage] }}
+        />
+        <h3 className="text-overline uppercase text-content-secondary truncate">
           {ESTAGIO_FUNIL_LABELS[stage]}
         </h3>
-        <span className="text-xs font-mono text-content-tertiary tabular-nums ml-auto">
+        <span className="ml-auto inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-surface-tertiary text-caption font-mono text-content-secondary tabular-nums">
           {triagens.length}
         </span>
       </div>

@@ -172,7 +172,7 @@ export function ConversationList({ triagens, chatwootBaseUrl }: ConversationList
         triagem={selected}
         open={!!selected}
         onClose={() => setSelected(null)}
-        chatwootBaseUrl={chatwootBaseUrl}
+        onSaved={(t) => setSelected(t)}
       />
     </>
   )

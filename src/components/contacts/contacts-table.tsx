@@ -194,7 +194,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
                   <tr
                     key={t.id}
                     onClick={() => setSelected(t)}
-                    className="border-t border-border hover:bg-surface-tertiary/50 cursor-pointer transition-colors"
+                    className="border-t border-border hover:bg-surface-tertiary cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3 font-medium text-content-primary">
                       {t.contact_name ?? '—'}
@@ -251,7 +251,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
         triagem={selected}
         open={!!selected}
         onClose={() => setSelected(null)}
-        chatwootBaseUrl={process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL}
+        onSaved={(t) => setSelected(t)}
       />
     </>
   )

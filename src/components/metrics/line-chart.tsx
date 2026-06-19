@@ -42,13 +42,17 @@ export function LineChart({ data, xKey, lines, height = 300 }: LineChartProps) {
           tickLine={false}
         />
         <Tooltip
+          cursor={{ stroke: 'var(--border-hover)', strokeWidth: 1 }}
           contentStyle={{
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border-default)',
-            borderRadius: 8,
+            borderRadius: 12,
+            boxShadow: 'var(--shadow-elevated)',
             fontSize: 13,
             fontFamily: 'var(--font-body)',
           }}
+          labelStyle={{ color: 'var(--text-secondary)', fontSize: 12, marginBottom: 4 }}
+          itemStyle={{ color: 'var(--text-primary)' }}
         />
         {lines.map((line) => (
           <Line

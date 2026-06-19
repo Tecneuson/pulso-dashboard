@@ -22,11 +22,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light')
 
   useEffect(() => {
+    // Sincroniza o estado com o que o script anti-flash (em layout.tsx) já aplicou.
     const stored = localStorage.getItem('pulso-theme') as Theme | null
-    if (stored === 'dark' || stored === 'light') {
-      setTheme(stored)
-      document.documentElement.setAttribute('data-theme', stored)
-    }
+    const initial: Theme = stored === 'light' || stored === 'dark' ? stored : 'light'
+    setTheme(initial)
+    document.documentElement.setAttribute('data-theme', initial)
   }, [])
 
   function toggle() {

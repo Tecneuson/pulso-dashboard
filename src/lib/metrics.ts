@@ -16,12 +16,9 @@ export function computeKpis(triagens: Triagem[]): KpiData {
   const monthList = triagens.filter((t) => new Date(t.created_at) >= startOfMonth)
   const todayList = triagens.filter((t) => new Date(t.created_at) >= startOfToday)
   const qualificados = triagens.filter((t) => t.status === 'qualificado')
-  const internados = triagens.filter((t) => t.estagio_funil === 'internacao_confirmada')
+  const internados = triagens.filter((t) => t.estagio_funil === 'internado')
   const waiting = triagens.filter(
-    (t) =>
-      !t.estagio_funil ||
-      t.estagio_funil === 'novo_contato' ||
-      t.estagio_funil === 'atendendo'
+    (t) => !t.estagio_funil || t.estagio_funil === 'em_atendimento'
   )
 
   const conversionRate =
@@ -96,7 +93,7 @@ export function healthPlanBreakdown(triagens: Triagem[]) {
     const key = t.plano_saude ?? 'sem_plano'
     if (!counts[key]) counts[key] = { total: 0, converted: 0 }
     counts[key].total += 1
-    if (t.estagio_funil === 'internacao_confirmada') counts[key].converted += 1
+    if (t.estagio_funil === 'internado') counts[key].converted += 1
   }
   return Object.entries(counts)
     .map(([key, { total, converted }]) => ({

@@ -1,5 +1,6 @@
 import type { HTMLAttributes } from 'react'
 import type { FunnelStage } from '@/types'
+import { ESTAGIO_FUNIL_LABELS } from '@/types'
 
 type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'brand'
 
@@ -7,19 +8,21 @@ interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant
 }
 
+// Tints translúcidos: funcionam no dark (padrão) e no light. Texto mais escuro no light,
+// mais claro no dark, para manter contraste AA sobre o tom.
 const variantStyles: Record<BadgeVariant, string> = {
-  default: 'bg-surface-tertiary text-content-secondary',
-  success: 'bg-success-50 text-success-700',
-  warning: 'bg-warning-50 text-warning-700',
-  danger: 'bg-danger-50 text-danger-700',
-  info: 'bg-info-50 text-info-700',
-  brand: 'bg-brand-50 text-brand-700',
+  default: 'bg-surface-tertiary text-content-secondary border border-border',
+  success: 'bg-success-500/12 text-success-700 dark:text-success-500 border border-success-500/20',
+  warning: 'bg-warning-500/12 text-warning-700 dark:text-warning-500 border border-warning-500/20',
+  danger: 'bg-danger-500/12 text-danger-700 dark:text-danger-500 border border-danger-500/20',
+  info: 'bg-info-500/12 text-info-700 dark:text-info-500 border border-info-500/20',
+  brand: 'bg-brand-500/12 text-brand-700 dark:text-brand-400 border border-brand-500/20',
 }
 
 export function Badge({ variant = 'default', className = '', children, ...props }: BadgeProps) {
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-[6px] text-[13px] font-medium ${variantStyles[variant]} ${className}`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-body-sm font-medium ${variantStyles[variant]} ${className}`}
       {...props}
     >
       {children}
@@ -29,14 +32,16 @@ export function Badge({ variant = 'default', className = '', children, ...props 
 
 // Maps funnel stages to badge variants
 const stageVariants: Record<FunnelStage, BadgeVariant> = {
-  novo_contato: 'default',
-  atendendo: 'info',
-  consultando_convenio: 'warning',
-  autorizado_pelo_convenio: 'brand',
-  paciente_a_caminho: 'info',
-  hospital_recepcao: 'brand',
+  em_atendimento: 'info',
+  convenio_nao_legivel: 'warning',
+  convenio_legivel: 'brand',
+  em_avaliacao_hsm: 'info',
+  vaga_cedida: 'brand',
+  vaga_recusada_medico: 'danger',
+  recusou_origem: 'danger',
   recusou_internacao: 'danger',
-  internacao_confirmada: 'success',
+  sem_condicoes_financeiras: 'warning',
+  internado: 'success',
 }
 
 interface StageBadgeProps extends HTMLAttributes<HTMLSpanElement> {
@@ -45,20 +50,9 @@ interface StageBadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 export function StageBadge({ stage, label, className = '', ...props }: StageBadgeProps) {
-  const labels: Record<FunnelStage, string> = {
-    novo_contato: 'Novo contato',
-    atendendo: 'Atendendo',
-    consultando_convenio: 'Consultando convênio',
-    autorizado_pelo_convenio: 'Autorizado',
-    paciente_a_caminho: 'A caminho',
-    hospital_recepcao: 'Recepção',
-    recusou_internacao: 'Recusou',
-    internacao_confirmada: 'Internado',
-  }
-
   return (
     <Badge variant={stageVariants[stage]} className={className} {...props}>
-      {label ?? labels[stage]}
+      {label ?? ESTAGIO_FUNIL_LABELS[stage]}
     </Badge>
   )
 }

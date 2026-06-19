@@ -81,13 +81,17 @@ export function BarChart({
           </>
         )}
         <Tooltip
+          cursor={{ fill: 'var(--bg-tertiary)', opacity: 0.5 }}
           contentStyle={{
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border-default)',
-            borderRadius: 8,
+            borderRadius: 12,
+            boxShadow: 'var(--shadow-elevated)',
             fontSize: 13,
             fontFamily: 'var(--font-body)',
           }}
+          labelStyle={{ color: 'var(--text-secondary)', fontSize: 12, marginBottom: 4 }}
+          itemStyle={{ color: 'var(--text-primary)' }}
         />
         {bars.map((bar) => (
           <Bar key={bar.key} dataKey={bar.key} name={bar.label} fill={bar.color} radius={[4, 4, 0, 0]} />

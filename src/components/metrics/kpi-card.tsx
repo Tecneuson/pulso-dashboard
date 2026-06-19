@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { ArrowDown, ArrowUp, Minus } from 'lucide-react'
 
 interface KpiCardProps {
   label: string
@@ -12,56 +13,58 @@ interface KpiCardProps {
 }
 
 export function KpiCard({ label, value, delta, deltaLabel, prefix, suffix }: KpiCardProps) {
-  const [displayed, setDisplayed] = useState(typeof value === 'number' ? 0 : value)
-  const ref = useRef<HTMLDivElement>(null)
+  const isNumber = typeof value === 'number'
+  const decimals = isNumber && !Number.isInteger(value) ? (String(value).split('.')[1]?.length ?? 0) : 0
+  const [displayed, setDisplayed] = useState<number>(isNumber ? 0 : 0)
 
   useEffect(() => {
-    if (typeof value !== 'number') {
-      setDisplayed(value)
-      return
-    }
-
-    const target = value
+    if (!isNumber) return
+    const target = value as number
     const duration = 600
     const start = performance.now()
+    let raf = 0
 
     function tick(now: number) {
-      const elapsed = now - start
-      const progress = Math.min(elapsed / duration, 1)
+      const progress = Math.min((now - start) / duration, 1)
       const eased = 1 - Math.pow(1 - progress, 3)
-      setDisplayed(Math.round(target * eased))
-      if (progress < 1) requestAnimationFrame(tick)
+      setDisplayed(progress < 1 ? Number((target * eased).toFixed(decimals)) : target)
+      if (progress < 1) raf = requestAnimationFrame(tick)
     }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [value, isNumber, decimals])
 
-    requestAnimationFrame(tick)
-  }, [value])
+  const shown = isNumber
+    ? displayed.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+    : value
+
+  const DeltaIcon = delta === undefined ? null : delta > 0 ? ArrowUp : delta < 0 ? ArrowDown : Minus
+  const deltaColor =
+    delta === undefined
+      ? ''
+      : delta > 0
+      ? 'text-success-600 dark:text-success-500'
+      : delta < 0
+      ? 'text-danger-600 dark:text-danger-500'
+      : 'text-content-tertiary'
 
   return (
-    <div
-      ref={ref}
-      className="bg-surface-secondary border border-border rounded-lg p-4 shadow-card animate-fade-up"
-    >
-      <p className="text-[13px] text-content-secondary mb-1">{label}</p>
-      <p className="font-mono text-[28px] font-semibold text-content-primary tabular-nums leading-tight">
+    <div className="surface-elevated-highlight bg-surface-secondary border border-border rounded-lg p-4 shadow-card transition-colors hover:border-border-hover animate-fade-up">
+      <p className="text-overline uppercase text-content-tertiary">{label}</p>
+      <p className="mt-2 font-mono text-mono-lg font-semibold text-content-primary tabular-nums leading-none">
         {prefix}
-        {displayed}
+        {shown}
         {suffix}
       </p>
-      {delta !== undefined && (
-        <p
-          className={`text-xs font-mono mt-1 ${
-            delta > 0
-              ? 'text-success-500'
-              : delta < 0
-              ? 'text-danger-500'
-              : 'text-content-tertiary'
-          }`}
-        >
-          {delta > 0 ? '+' : ''}
-          {delta}
-          {deltaLabel ? ` ${deltaLabel}` : '%'}
-        </p>
-      )}
+      <div className="mt-2 h-4 flex items-center">
+        {delta !== undefined && DeltaIcon && (
+          <span className={`inline-flex items-center gap-1 font-mono text-mono-sm tabular-nums ${deltaColor}`}>
+            <DeltaIcon size={12} strokeWidth={2.5} />
+            {Math.abs(delta)}
+            {deltaLabel ? ` ${deltaLabel}` : '%'}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

@@ -24,9 +24,9 @@ function groupByStage(triagens: Triagem[]): Record<EstagioFunil, Triagem[]> {
     {} as Record<EstagioFunil, Triagem[]>
   )
   for (const t of triagens) {
-    const stage = (t.estagio_funil ?? 'novo_contato') as EstagioFunil
+    const stage = (t.estagio_funil ?? 'em_atendimento') as EstagioFunil
     if (init[stage]) init[stage].push(t)
-    else init.novo_contato.push(t)
+    else init.em_atendimento.push(t)
   }
   return init
 }

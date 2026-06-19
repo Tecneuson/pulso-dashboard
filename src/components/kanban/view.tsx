@@ -5,7 +5,6 @@ import { Filter } from 'lucide-react'
 import { KanbanBoard } from './board'
 import { CardDetail } from './card-detail'
 import { Select, Button } from '@/components/ui'
-import { createClient } from '@/lib/supabase/client'
 import type { Triagem, EstagioFunil } from '@/types'
 
 interface KanbanViewProps {
@@ -18,18 +17,22 @@ export function KanbanView({ triagens }: KanbanViewProps) {
   const [items, setItems] = useState(triagens)
 
   async function handleStageChange(id: string, newStage: EstagioFunil) {
+    const prevItems = items
     setItems((prev) =>
       prev.map((t) => (t.id === id ? { ...t, estagio_funil: newStage } : t))
     )
 
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('triagem_hsm')
-      .update({ estagio_funil: newStage })
-      .eq('id', id)
-
-    if (error) {
-      console.error('Falha ao salvar estágio:', error.message)
+    // Grava via endpoint server-side (que também sincroniza com o Chatwoot).
+    try {
+      const res = await fetch('/api/triagem', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, estagio_funil: newStage }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+    } catch (e) {
+      console.error('Falha ao salvar estágio:', e)
+      setItems(prevItems) // reverte em caso de erro
     }
   }
 
@@ -96,6 +99,10 @@ export function KanbanView({ triagens }: KanbanViewProps) {
         triagem={selected}
         open={!!selected}
         onClose={() => setSelected(null)}
+        onSaved={(t) => {
+          setItems((prev) => prev.map((x) => (x.id === t.id ? t : x)))
+          setSelected(t)
+        }}
       />
     </>
   )
