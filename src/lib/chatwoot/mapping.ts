@@ -68,6 +68,8 @@ const paraQuemMap: Record<string, string> = {
   amigo: 'Amigo(a)',
 }
 
+// Campo NOVO `motivo_contato_crm` (contato, list TM/KIDS/TUS) — só o dashboard escreve nele,
+// o n8n não toca; por isso o valor "cola". Chave separada do `motivo_do_contato` do n8n.
 const motivoContatoMap: Record<string, string> = {
   transtorno_mental_adulto: 'TM',
   transtorno_mental_infantojuvenil: 'KIDS',
@@ -100,7 +102,7 @@ export const FIELD_MAPS: FieldMap[] = [
   { triagemField: 'plano_saude', level: 'contact', chatwootKey: 'plano_de_saude', slugToLabel: planoMap },
   { triagemField: 'tipo_contato', level: 'contact', chatwootKey: 'quem_e_o_contato', slugToLabel: tipoContatoMap },
   { triagemField: 'para_quem', level: 'contact', chatwootKey: 'para_quem_e_a_solicitacao', slugToLabel: paraQuemMap },
-  { triagemField: 'motivo_contato', level: 'contact', chatwootKey: 'motivo_do_contato', slugToLabel: motivoContatoMap },
+  { triagemField: 'motivo_contato', level: 'contact', chatwootKey: 'motivo_contato_crm', slugToLabel: motivoContatoMap },
   { triagemField: 'assunto', level: 'conversation', chatwootKey: 'assunto_da_conversa', slugToLabel: assuntoMap },
   { triagemField: 'motivo_perda', level: 'conversation', chatwootKey: 'motivo_de_perda', slugToLabel: motivoPerdaMap },
 ]
