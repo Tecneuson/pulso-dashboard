@@ -8,13 +8,14 @@ interface ModalProps {
   onClose: () => void
   title?: string
   children: ReactNode
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
 }
 
 const sizeStyles = {
   sm: 'max-w-md',
   md: 'max-w-lg',
   lg: 'max-w-2xl',
+  xl: 'max-w-5xl',
 }
 
 export function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
@@ -51,11 +52,11 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
 
       {/* Content */}
       <div
-        className={`relative w-full ${sizeStyles[size]} bg-surface-elevated border border-border rounded-lg shadow-modal animate-slide-in`}
+        className={`relative w-full ${sizeStyles[size]} max-h-[90vh] flex flex-col bg-surface-elevated border border-border rounded-lg shadow-modal animate-slide-in`}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
             <h2 className="font-display text-lg font-medium text-content-primary">{title}</h2>
             <button
               onClick={onClose}
@@ -67,7 +68,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
         )}
 
         {/* Body */}
-        <div className="p-5">{children}</div>
+        <div className="p-5 flex-1 min-h-0 overflow-y-auto">{children}</div>
       </div>
     </div>
   )

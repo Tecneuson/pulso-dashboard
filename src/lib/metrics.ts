@@ -1,4 +1,5 @@
 import type { Triagem } from '@/types'
+import { etapaFromEstagio } from './funil-etapas'
 
 export interface KpiData {
   totalMonth: number
@@ -16,10 +17,11 @@ export function computeKpis(triagens: Triagem[]): KpiData {
   const monthList = triagens.filter((t) => new Date(t.created_at) >= startOfMonth)
   const todayList = triagens.filter((t) => new Date(t.created_at) >= startOfToday)
   const qualificados = triagens.filter((t) => t.status === 'qualificado')
-  const internados = triagens.filter((t) => t.estagio_funil === 'internado')
-  const waiting = triagens.filter(
-    (t) => !t.estagio_funil || t.estagio_funil === 'em_atendimento'
-  )
+  const internados = triagens.filter((t) => etapaFromEstagio(t.estagio_funil) === 'internacao')
+  const waiting = triagens.filter((t) => {
+    const etapa = etapaFromEstagio(t.estagio_funil)
+    return etapa === 'contato' || etapa === 'atendendo'
+  })
 
   const conversionRate =
     monthList.length > 0 ? (internados.length / monthList.length) * 100 : 0
@@ -93,7 +95,7 @@ export function healthPlanBreakdown(triagens: Triagem[]) {
     const key = t.plano_saude ?? 'sem_plano'
     if (!counts[key]) counts[key] = { total: 0, converted: 0 }
     counts[key].total += 1
-    if (t.estagio_funil === 'internado') counts[key].converted += 1
+    if (etapaFromEstagio(t.estagio_funil) === 'internacao') counts[key].converted += 1
   }
   return Object.entries(counts)
     .map(([key, { total, converted }]) => ({

@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Search, ExternalLink, MessageCircle, Check, X } from 'lucide-react'
-import { Input, StageBadge } from '@/components/ui'
+import { Input, EtapaBadge } from '@/components/ui'
 import { CardDetail } from '@/components/kanban/card-detail'
-import type { Triagem, EstagioFunil } from '@/types'
+import type { Triagem, TriagemLead } from '@/types'
+import { comEtapa, etapaFromEstagio } from '@/lib/funil-etapas'
 
 interface ConversationListProps {
   triagens: Triagem[]
@@ -17,9 +18,12 @@ export function ConversationList({ triagens, chatwootBaseUrl }: ConversationList
     'all'
   )
   const [selected, setSelected] = useState<Triagem | null>(null)
+  const [rows, setRows] = useState<Triagem[]>(triagens)
+  useEffect(() => setRows(triagens), [triagens])
+  const selectedLead = selected ? comEtapa(selected) : null
 
   const filtered = useMemo(() => {
-    return triagens.filter((t) => {
+    return rows.filter((t) => {
       if (filter === 'concluidas' && !t.triagem_concluida) return false
       if (filter === 'em_andamento' && t.triagem_concluida) return false
       if (filter === 'transbordadas' && !t.transbordado) return false
@@ -39,7 +43,7 @@ export function ConversationList({ triagens, chatwootBaseUrl }: ConversationList
       }
       return true
     })
-  }, [triagens, search, filter])
+  }, [rows, search, filter])
 
   return (
     <>
@@ -89,7 +93,6 @@ export function ConversationList({ triagens, chatwootBaseUrl }: ConversationList
           </div>
         )}
         {filtered.map((t) => {
-          const stage = (t.estagio_funil ?? 'novo_contato') as EstagioFunil
           const chatwootUrl =
             chatwootBaseUrl && t.conversation_id
               ? `${chatwootBaseUrl}/app/accounts/1/conversations/${t.conversation_id}`
@@ -119,7 +122,7 @@ export function ConversationList({ triagens, chatwootBaseUrl }: ConversationList
                       {t.observacoes ?? 'Sem observações'}
                     </p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <StageBadge stage={stage} />
+                      <EtapaBadge etapa={etapaFromEstagio(t.estagio_funil)} />
                       {t.triagem_concluida && (
                         <span className="inline-flex items-center gap-1 text-[11px] text-success-500">
                           <Check size={11} />
@@ -169,10 +172,13 @@ export function ConversationList({ triagens, chatwootBaseUrl }: ConversationList
       </div>
 
       <CardDetail
-        triagem={selected}
+        triagem={selectedLead}
         open={!!selected}
         onClose={() => setSelected(null)}
-        onSaved={(t) => setSelected(t)}
+        onSaved={(u: TriagemLead) => {
+          setRows((prev) => prev.map((r) => (r.id === u.id ? u : r)))
+          setSelected(u)
+        }}
       />
     </>
   )

@@ -7,6 +7,8 @@ import {
   LayoutDashboard,
   Columns3,
   Users,
+  UserPlus,
+  CalendarDays,
   MessageSquare,
   BarChart3,
   Settings,
@@ -22,8 +24,10 @@ const navSections = [
   {
     label: 'Operação',
     items: [
-      { href: '/kanban' as const, label: 'Kanban', icon: Columns3 },
+      { href: '/kanban' as const, label: 'Funil', icon: Columns3 },
+      { href: '/agenda' as const, label: 'Agenda', icon: CalendarDays },
       { href: '/contacts' as const, label: 'Contatos', icon: Users },
+      { href: '/captadores' as const, label: 'Captadores', icon: UserPlus },
       { href: '/conversations' as const, label: 'Conversas', icon: MessageSquare },
     ],
   },

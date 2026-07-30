@@ -44,6 +44,12 @@
   --stage-recepcao: #4DB57C;
   --stage-recusou: #F04438;
   --stage-confirmado: #12B76A;
+
+  /* Classificação do paciente — escala termômetro: quanto mais grave, mais quente.
+     Internado (verde) → Churn < 1 ano (amarelo) → Churn (laranja) → Irregular (vermelho) */
+  --class-churn: #EA580C;
+  --class-churn-recente: #CA8A04;
+  --class-irregular: #DC2626;
 }
 
 [data-theme="dark"] {
@@ -79,6 +85,10 @@
 
   --stage-autorizado: #2EA866;
   --stage-a-caminho: #5DCAA5;
+
+  --class-churn: #F97316;
+  --class-churn-recente: #EAB308;
+  --class-irregular: #EF4444;
 }
 
 /* Reduced motion */

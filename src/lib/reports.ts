@@ -1,11 +1,10 @@
-import { ESTAGIO_FUNIL, ESTAGIO_FUNIL_LABELS } from '@/types'
 import type { Triagem, EstagioFunil } from '@/types'
+import { FUNIL_ETAPAS, FUNIL_ETAPA_LABELS, etapaFromEstagio } from './funil-etapas'
 
 export function funnelBreakdown(triagens: Triagem[]) {
-  return ESTAGIO_FUNIL.map((stage) => ({
-    stage: ESTAGIO_FUNIL_LABELS[stage],
-    count: triagens.filter((t) => (t.estagio_funil ?? 'novo_contato') === stage)
-      .length,
+  return FUNIL_ETAPAS.map((etapa) => ({
+    stage: FUNIL_ETAPA_LABELS[etapa],
+    count: triagens.filter((t) => etapaFromEstagio(t.estagio_funil) === etapa).length,
   })).filter((s) => s.count > 0)
 }
 
@@ -28,8 +27,8 @@ export function weeklyConversion(triagens: Triagem[], weeks = 8) {
     buckets.push({
       week: start.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
       total: inWeek.length,
-      internados: inWeek.filter((t) => t.estagio_funil === 'internado').length,
-      perdidos: inWeek.filter((t) => t.estagio_funil === 'recusou_internacao').length,
+      internados: inWeek.filter((t) => etapaFromEstagio(t.estagio_funil) === 'internacao').length,
+      perdidos: inWeek.filter((t) => etapaFromEstagio(t.estagio_funil) === 'perdido').length,
     })
   }
 
@@ -126,8 +125,8 @@ export function avgFunnelTimeMinutes(triagens: Triagem[]) {
 export function summaryStats(triagens: Triagem[]) {
   const concluidas = triagens.filter((t) => t.triagem_concluida).length
   const transbordadas = triagens.filter((t) => t.transbordado).length
-  const internados = triagens.filter((t) => t.estagio_funil === 'internado').length
-  const perdidos = triagens.filter((t) => t.estagio_funil === 'recusou_internacao').length
+  const internados = triagens.filter((t) => etapaFromEstagio(t.estagio_funil) === 'internacao').length
+  const perdidos = triagens.filter((t) => etapaFromEstagio(t.estagio_funil) === 'perdido').length
   const ativos = triagens.length - internados - perdidos
 
   return {

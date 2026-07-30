@@ -1,6 +1,7 @@
 import type { HTMLAttributes } from 'react'
 import type { FunnelStage } from '@/types'
 import { ESTAGIO_FUNIL_LABELS } from '@/types'
+import { FUNIL_ETAPA_LABELS, FUNIL_ETAPA_VARIANT, type FunilEtapa } from '@/lib/funil-etapas'
 
 type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'brand'
 
@@ -53,6 +54,20 @@ export function StageBadge({ stage, label, className = '', ...props }: StageBadg
   return (
     <Badge variant={stageVariants[stage]} className={className} {...props}>
       {label ?? ESTAGIO_FUNIL_LABELS[stage]}
+    </Badge>
+  )
+}
+
+// Badge das etapas do novo funil (camada visual). Ver `@/lib/funil-etapas`.
+interface EtapaBadgeProps extends HTMLAttributes<HTMLSpanElement> {
+  etapa: FunilEtapa
+  label?: string
+}
+
+export function EtapaBadge({ etapa, label, className = '', ...props }: EtapaBadgeProps) {
+  return (
+    <Badge variant={FUNIL_ETAPA_VARIANT[etapa]} className={className} {...props}>
+      {label ?? FUNIL_ETAPA_LABELS[etapa]}
     </Badge>
   )
 }

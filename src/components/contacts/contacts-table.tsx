@@ -1,11 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Search, Download, Phone, Mail } from 'lucide-react'
-import { Input, Select, Button, StageBadge } from '@/components/ui'
+import { Input, Select, Button, EtapaBadge } from '@/components/ui'
 import { CardDetail } from '@/components/kanban/card-detail'
-import { ESTAGIO_FUNIL_LABELS } from '@/types'
-import type { Triagem, EstagioFunil } from '@/types'
+import type { Triagem, TriagemLead } from '@/types'
+import { comEtapa, etapaFromEstagio, FUNIL_ETAPA_OPTIONS } from '@/lib/funil-etapas'
 
 const planoLabels: Record<string, string> = {
   amil: 'Amil',
@@ -80,10 +80,13 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
   const [plano, setPlano] = useState<string>('')
   const [motivo, setMotivo] = useState<string>('')
   const [selected, setSelected] = useState<Triagem | null>(null)
+  const [rows, setRows] = useState<Triagem[]>(triagens)
+  useEffect(() => setRows(triagens), [triagens])
+  const selectedLead = selected ? comEtapa(selected) : null
 
   const filtered = useMemo(() => {
-    return triagens.filter((t) => {
-      if (stage && (t.estagio_funil ?? 'novo_contato') !== stage) return false
+    return rows.filter((t) => {
+      if (stage && etapaFromEstagio(t.estagio_funil) !== stage) return false
       if (plano && t.plano_saude !== plano) return false
       if (motivo && t.motivo_contato !== motivo) return false
       if (search) {
@@ -101,7 +104,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
       }
       return true
     })
-  }, [triagens, search, stage, plano, motivo])
+  }, [rows, search, stage, plano, motivo])
 
   function handleExport() {
     const csv = toCsv(filtered)
@@ -132,13 +135,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
         <Select
           value={stage}
           onChange={(e) => setStage(e.target.value)}
-          options={[
-            { value: '', label: 'Todos os estágios' },
-            ...Object.entries(ESTAGIO_FUNIL_LABELS).map(([v, l]) => ({
-              value: v,
-              label: l,
-            })),
-          ]}
+          options={[{ value: '', label: 'Todas as etapas' }, ...FUNIL_ETAPA_OPTIONS]}
         />
         <Select
           value={plano}
@@ -189,7 +186,6 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
                 </tr>
               )}
               {filtered.map((t) => {
-                const stageKey = (t.estagio_funil ?? 'novo_contato') as EstagioFunil
                 return (
                   <tr
                     key={t.id}
@@ -230,7 +226,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
                         : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <StageBadge stage={stageKey} />
+                      <EtapaBadge etapa={etapaFromEstagio(t.estagio_funil)} />
                     </td>
                     <td className="px-4 py-3 text-content-tertiary text-xs tabular-nums">
                       {new Date(t.created_at).toLocaleDateString('pt-BR', {
@@ -248,10 +244,13 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
       </div>
 
       <CardDetail
-        triagem={selected}
+        triagem={selectedLead}
         open={!!selected}
         onClose={() => setSelected(null)}
-        onSaved={(t) => setSelected(t)}
+        onSaved={(u: TriagemLead) => {
+          setRows((prev) => prev.map((r) => (r.id === u.id ? u : r)))
+          setSelected(u)
+        }}
       />
     </>
   )

@@ -1,0 +1,1 @@
+ALTER TABLE anotacoes ALTER COLUMN sessao_id DROP NOT NULL;

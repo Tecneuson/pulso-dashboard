@@ -16,7 +16,12 @@ import {
 import { Loader2 } from 'lucide-react'
 import type { Paciente, EstagioReativacao } from '@/types'
 import { ESTAGIO_REATIVACAO, ESTAGIO_REATIVACAO_LABELS } from '@/types'
-import { REATIVACAO_COLOR, formatDateBR } from './stage-meta'
+import { formatarCpf } from '@/lib/cpf'
+import { classificacaoMeta, internacoesConhecidas } from '@/lib/funil'
+import { situacaoAgendamento } from '@/lib/agendamentos'
+import { CardBase } from '../card-base'
+import { useFunilDados } from '../funil-dados'
+import { REATIVACAO_COLOR } from './stage-meta'
 import { PacienteDetail } from './paciente-detail'
 
 const PAGE = 50
@@ -171,7 +176,7 @@ export function PacientesBoard({ q, classificacao, convenio }: PacientesBoardPro
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-3 overflow-x-auto pb-4 min-h-[calc(100vh-15rem)]">
+      <div className="flex gap-3 overflow-x-auto h-full min-h-0 pb-2">
         {ESTAGIO_REATIVACAO.map((stage) => (
           <Column
             key={stage}
@@ -204,11 +209,11 @@ function Column({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col shrink-0 w-[280px] rounded-xl transition-colors ${
+      className={`flex flex-col shrink-0 w-[300px] h-full min-h-0 rounded-xl transition-colors ${
         isOver ? 'bg-surface-secondary ring-2 ring-brand-500/30' : ''
       }`}
     >
-      <div className="flex items-center gap-2 px-2.5 py-2.5 mb-1">
+      <div className="flex items-center gap-2 px-2.5 py-2.5 mb-1 shrink-0">
         <span
           className="w-1.5 h-1.5 rounded-full shrink-0"
           style={{ backgroundColor: REATIVACAO_COLOR[stage] }}
@@ -221,7 +226,7 @@ function Column({
         </span>
       </div>
 
-      <div className="flex-1 space-y-2 px-1 min-h-[120px]">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-2 px-1 pb-2">
         {state.rows.map((p) => (
           <PacienteKanbanCard key={p.id} paciente={p} onClick={() => onCardClick(p)} />
         ))}
@@ -255,28 +260,41 @@ function PacienteKanbanCard({
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: paciente.id,
   })
-  const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
-    : undefined
+  const dados = useFunilDados()
+  const meta = classificacaoMeta(paciente.classificacao_cliente ?? '')
+  const agendamento = dados.proximoDoPaciente(paciente.id)
 
   return (
-    <div
+    <CardBase
       ref={!dragOverlay ? setNodeRef : undefined}
-      style={style}
       {...(!dragOverlay ? { ...attributes, ...listeners } : {})}
       onClick={onClick}
-      className={`bg-surface-secondary border border-border rounded-lg p-3 shadow-card cursor-grab active:cursor-grabbing transition-[transform,box-shadow,border-color] duration-150 hover:border-border-hover hover:shadow-card-hover hover:-translate-y-px ${
-        isDragging ? 'opacity-30' : ''
-      } ${dragOverlay ? 'shadow-elevated scale-[1.02] cursor-grabbing' : ''}`}
-    >
-      <p className="text-sm font-medium text-content-primary truncate">{paciente.nome_cliente}</p>
-      <p className="text-[13px] text-content-secondary truncate mt-0.5">
-        {paciente.convenio_raw ?? 'Sem convênio'}
-      </p>
-      <div className="flex items-center justify-between mt-2 text-[11px] text-content-tertiary">
-        <span className="font-mono">#{paciente.identificador_cliente}</span>
-        <span className="font-mono tabular-nums">{formatDateBR(paciente.data_emissao_max)}</span>
-      </div>
-    </div>
+      style={transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined}
+      className={`cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-30' : ''} ${
+        dragOverlay ? 'shadow-elevated scale-[1.02] cursor-grabbing' : ''
+      }`}
+      accent={REATIVACAO_COLOR[paciente.estagio_reativacao]}
+      badges={[
+        { label: 'Paciente' },
+        ...(paciente.classificacao_cliente
+          ? [{ label: meta.label, className: meta.badgeClass }]
+          : []),
+      ]}
+      nome={paciente.nome_cliente}
+      documento={paciente.cpf ? formatarCpf(paciente.cpf) : null}
+      convenio={paciente.convenio_raw}
+      contatos={[]}
+      agente={dados.nomeAgente(paciente.responsavel_id)}
+      contadores={{
+        internacoes: internacoesConhecidas(paciente).length,
+        perdas: 0,
+        conversas: 0,
+      }}
+      proximo={{
+        data: agendamento?.data ?? null,
+        nota: agendamento?.nota ?? null,
+        situacao: situacaoAgendamento(agendamento),
+      }}
+    />
   )
 }

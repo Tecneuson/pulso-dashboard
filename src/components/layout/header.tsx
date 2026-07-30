@@ -1,52 +1,92 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Bell, Sun, Moon } from 'lucide-react'
+import { Search, Bell, Sun, Moon, X } from 'lucide-react'
 import { useTheme } from '@/components/theme-provider'
 
 interface HeaderProps {
   title: string
   subtitle?: string
+  /**
+   * Busca da própria página (ex.: o funil). Quando informada, ocupa o centro do
+   * header e SUBSTITUI a busca global de contatos — evita duas barras de busca
+   * na mesma tela.
+   */
+  search?: {
+    value: string
+    onChange: (value: string) => void
+    placeholder?: string
+  }
+  /** Ação principal à direita (ex.: "Adicionar Contato"). */
+  action?: ReactNode
 }
 
-export function Header({ title, subtitle }: HeaderProps) {
-  const [search, setSearch] = useState('')
+export function Header({ title, subtitle, search, action }: HeaderProps) {
+  const [buscaGlobal, setBuscaGlobal] = useState('')
   const { theme, toggle } = useTheme()
   const router = useRouter()
 
-  function handleSearch(e: React.FormEvent) {
+  function handleSearchGlobal(e: React.FormEvent) {
     e.preventDefault()
-    if (search.trim()) {
-      router.push(`/contacts?q=${encodeURIComponent(search.trim())}`)
+    if (buscaGlobal.trim()) {
+      router.push(`/contacts?q=${encodeURIComponent(buscaGlobal.trim())}`)
     }
   }
 
   return (
-    <header className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-border">
-      <div className="min-w-0">
-        <h1 className="font-display text-display-md text-content-primary truncate">
-          {title}
-        </h1>
-        {subtitle && (
-          <p className="text-sm text-content-secondary mt-0.5 truncate">{subtitle}</p>
-        )}
+    <header className="flex items-center gap-4 mb-6 pb-4 border-b border-border">
+      <div className="min-w-0 shrink-0">
+        <h1 className="font-display text-display-md text-content-primary truncate">{title}</h1>
+        {subtitle && <p className="text-sm text-content-secondary mt-0.5 truncate">{subtitle}</p>}
       </div>
 
-      <div className="flex items-center gap-1.5">
-        <form onSubmit={handleSearch} className="relative hidden md:block">
+      {search ? (
+        <div className="relative flex-1 max-w-2xl mx-auto">
           <Search
-            size={14}
+            size={15}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-content-tertiary pointer-events-none"
           />
           <input
-            type="text"
-            placeholder="Buscar contato..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 w-56 pl-8 pr-3 rounded-lg bg-surface-secondary border border-border text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/40 transition-colors"
+            type="search"
+            value={search.value}
+            onChange={(e) => search.onChange(e.target.value)}
+            placeholder={search.placeholder ?? 'Pesquisar'}
+            className="w-full h-10 pl-9 pr-8 rounded-lg bg-surface-secondary border border-border text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/40 transition-colors"
           />
-        </form>
+          {search.value && (
+            <button
+              type="button"
+              onClick={() => search.onChange('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-content-tertiary hover:text-content-primary"
+              aria-label="Limpar busca"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex-1" />
+      )}
+
+      <div className="flex items-center gap-1.5 shrink-0">
+        {action}
+
+        {!search && (
+          <form onSubmit={handleSearchGlobal} className="relative hidden md:block w-56">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-content-tertiary pointer-events-none"
+            />
+            <input
+              type="text"
+              placeholder="Buscar contato..."
+              value={buscaGlobal}
+              onChange={(e) => setBuscaGlobal(e.target.value)}
+              className="h-9 w-full pl-8 pr-3 rounded-lg bg-surface-secondary border border-border text-sm text-content-primary placeholder:text-content-tertiary focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/40 transition-colors"
+            />
+          </form>
+        )}
 
         <button
           onClick={toggle}

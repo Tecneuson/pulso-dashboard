@@ -90,18 +90,31 @@ export const STATUS_TRIAGEM = [
 ] as const
 export type StatusTriagem = (typeof STATUS_TRIAGEM)[number]
 
+// Slugs exatos do CHECK `triagem_hsm_motivo_perda_check` no banco.
 export const MOTIVO_PERDA = [
   'parou_de_interagir',
   'desistiu_do_tratamento',
   'financeiro',
-  'plano_nao_autorizou',
-  'plano_sem_convenio',
-  'nao_tem_plano',
+  'plano_de_saude_nao_autorizou',
+  'plano_de_saude_sem_convenio',
+  'nao_tem_plano_de_saude',
   'nao_gostou_do_hospital',
   'sus',
   'outro',
 ] as const
 export type MotivoPerda = (typeof MOTIVO_PERDA)[number]
+
+export const MOTIVO_PERDA_LABELS: Record<MotivoPerda, string> = {
+  parou_de_interagir: 'Parou de interagir',
+  desistiu_do_tratamento: 'Desistiu do tratamento',
+  financeiro: 'Financeiro',
+  plano_de_saude_nao_autorizou: 'Plano de saúde não autorizou',
+  plano_de_saude_sem_convenio: 'Plano de saúde sem cobertura',
+  nao_tem_plano_de_saude: 'Não tem plano de saúde',
+  nao_gostou_do_hospital: 'Não gostou do hospital',
+  sus: 'SUS',
+  outro: 'Outro(s)',
+}
 
 // Aliases para compatibilidade
 export type FunnelStage = EstagioFunil
@@ -138,6 +151,15 @@ export interface Triagem {
   motivo_perda: MotivoPerda | null
   observacoes: string | null
   tags: string[] | null
+  paciente_id: string | null
+  cpf: string | null
+  // Origem da conversa + número do paciente (colunas novas)
+  numero_paciente: string | null
+  origem_conversa: string | null
+  origem_hospital_id: string | null
+  origem_consultor_id: string | null
+  origem_profissional_tipo: string | null
+  captador_id: string | null
   utm_source: string | null
   utm_medium: string | null
   utm_campaign: string | null
@@ -189,10 +211,147 @@ export const ESTAGIO_REATIVACAO_TERMINAIS: EstagioReativacao[] = [
   'nao_localizado',
 ]
 
+// ------------------------------------------------------------
+// Funil unificado — classificações do paciente (coluna
+// `classificacao_cliente`, texto livre vindo do CSV mensal).
+// Valores EXATOS do banco; a UI traduz via CLASSIFICACAO_LABELS.
+// ------------------------------------------------------------
+
+export const CLASSIFICACAO_INTERNADO = 'Cliente Atualmente Internado'
+
+// Classificações que viram colunas próprias após "Internado" no Kanban.
+export const CLASSIFICACAO_FUNIL = [
+  'Cliente Churn',
+  'Cliente Churn até 1 ano sem internação',
+  'Cliente Irregular',
+] as const
+export type ClassificacaoFunil = (typeof CLASSIFICACAO_FUNIL)[number]
+
+export const CLASSIFICACAO_LABELS: Record<string, string> = {
+  'Cliente Churn': 'Churn',
+  'Cliente Churn até 1 ano sem internação': 'Churn < 1 ano',
+  'Cliente Irregular': 'Irregular',
+  [CLASSIFICACAO_INTERNADO]: 'Atualmente internado',
+}
+
+/** Resumo do paciente anexado ao lead no funil unificado (via triagem_hsm.paciente_id). */
+export interface PacienteResumo {
+  id: string
+  identificador_cliente: number
+  nome_cliente: string
+  convenio_raw: string | null
+  classificacao_cliente: string | null
+  data_emissao_max: string | null
+  data_emissao_min: string | null
+  penultima_internacao: string | null
+  cpf: string | null
+  telefones: string[] | null
+}
+
+/** Campos do resumo — usar no .select() para não trafegar a linha inteira. */
+export const PACIENTE_RESUMO_FIELDS =
+  'id, identificador_cliente, nome_cliente, convenio_raw, classificacao_cliente, data_emissao_max, data_emissao_min, penultima_internacao, cpf, telefones'
+
+/** Lead do funil unificado: triagem + paciente conciliado (quando houver). */
+export type TriagemLead = Triagem & {
+  paciente?: PacienteResumo | null
+}
+
+// ============================================================
+// Cadastros visuais (localStorage) — não existem no banco
+// ============================================================
+
+/** Consultor: intermediário entre a família do paciente e o hospital. */
+export interface Consultor {
+  id: string
+  nome: string
+  telefone?: string | null
+  email?: string | null
+  observacoes?: string | null
+  ativo: boolean
+  created_at: string
+}
+
+/** Hospital parceiro (origem "Interhospitalar"). */
+export interface Hospital {
+  id: string
+  nome: string
+  ativo: boolean
+  created_at: string
+}
+
+/** Captador/indicador de leads e pacientes. */
+export interface Captador {
+  id: string
+  nome: string
+  telefone?: string | null
+  email?: string | null
+  observacoes?: string | null
+  ativo: boolean
+  created_at: string
+}
+
+// ============================================================
+// Agendamentos — próximo contato (lead/paciente) + eventos da agenda
+// ============================================================
+
+export const AGENDAMENTO_STATUS = [
+  'pendente',
+  'contatado',
+  'nao_contatado',
+  'concluido',
+  'cancelado',
+] as const
+export type AgendamentoStatus = (typeof AGENDAMENTO_STATUS)[number]
+
+export const AGENDAMENTO_STATUS_LABELS: Record<AgendamentoStatus, string> = {
+  pendente: 'Pendente',
+  contatado: 'Entrou em contato',
+  nao_contatado: 'Não conseguiu contato',
+  concluido: 'Concluído',
+  cancelado: 'Cancelado',
+}
+
+export type AgendamentoTipo = 'contato' | 'evento'
+
+/** Lembrete de próximo contato ou evento avulso da agenda (tabela `agendamentos`). */
+export interface Agendamento {
+  id: string
+  tipo: AgendamentoTipo
+  titulo: string | null
+  triagem_id: string | null
+  paciente_id: string | null
+  /** YYYY-MM-DD */
+  data: string
+  /** HH:MM:SS ou null (dia inteiro) */
+  hora: string | null
+  nota: string | null
+  status: AgendamentoStatus
+  resultado_nota: string | null
+  concluido_at: string | null
+  criado_por: string | null
+  responsavel_id: string | null
+  created_at: string
+  updated_at: string
+  /** Nome do lead/paciente, resolvido pela API para a agenda. */
+  alvo_nome?: string | null
+}
+
+export interface Anotacao {
+  id: string
+  triagem_id: string | null
+  usuario_id: string
+  conteudo: string
+  created_at: string | null
+  usuarios?: { nome: string } | null
+}
+
 export interface Paciente {
   id: string
   identificador_cliente: number
   nome_cliente: string
+  cpf: string | null
+  telefones: string[]
   convenio_raw: string | null
   convenio_normalizado: string | null
   classificacao_cliente: string | null
@@ -206,6 +365,7 @@ export interface Paciente {
   penultima_internacao: string | null
   estagio_reativacao: EstagioReativacao
   responsavel_id: string | null
+  captador_id: string | null
   observacoes: string | null
   tags: string[] | null
   ultimo_contato_at: string | null

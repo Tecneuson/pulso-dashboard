@@ -1,50 +1,26 @@
 'use client'
 
 import { useDraggable } from '@dnd-kit/core'
-import { Clock, AlertTriangle } from 'lucide-react'
-import type { Triagem, EstagioFunil } from '@/types'
-import { Badge } from '@/components/ui'
+import { MOTIVO_PERDA_LABELS } from '@/types'
+import { formatarCpf } from '@/lib/cpf'
+import { classificacaoMeta } from '@/lib/funil'
+import { situacaoAgendamento } from '@/lib/agendamentos'
+import { FUNIL_ETAPA_VAR, type LeadComEtapa } from '@/lib/funil-etapas'
+import { CardBase, type CardBadge } from './card-base'
+import { useFunilDados } from './funil-dados'
 
 interface KanbanCardProps {
-  triagem: Triagem
+  triagem: LeadComEtapa
   onClick?: () => void
   isDragOverlay?: boolean
 }
 
-const STAGE_VAR: Record<EstagioFunil, string> = {
-  em_atendimento: 'var(--stage-atendendo)',
-  convenio_nao_legivel: 'var(--stage-consultando)',
-  convenio_legivel: 'var(--stage-autorizado)',
-  em_avaliacao_hsm: 'var(--stage-a-caminho)',
-  vaga_cedida: 'var(--stage-recepcao)',
-  vaga_recusada_medico: 'var(--stage-recusou)',
-  recusou_origem: 'var(--stage-recusou)',
-  recusou_internacao: 'var(--stage-recusou)',
-  sem_condicoes_financeiras: 'var(--stage-novo)',
-  internado: 'var(--stage-confirmado)',
-}
-
-function formatDuration(isoDate: string): string {
-  const ms = Date.now() - new Date(isoDate).getTime()
-  const hours = Math.floor(ms / 3600000)
-  const mins = Math.floor((ms % 3600000) / 60000)
-  if (hours > 0) return `${hours}h ${mins}m`
-  return `${mins}m`
-}
-
-function getTimeColor(isoDate: string): string {
-  const hours = (Date.now() - new Date(isoDate).getTime()) / 3600000
-  if (hours < 2) return 'text-success-500'
-  if (hours < 6) return 'text-warning-500'
-  return 'text-danger-500'
-}
-
 const tipoContatoLabels: Record<string, string> = {
   lead: 'Lead',
-  ex_paciente: 'Ex-paciente',
+  ex_paciente: 'Paciente',
   responsavel: 'Responsável',
   responsavel_lead: 'Resp. lead',
-  responsavel_ex_paciente: 'Resp. ex-paciente',
+  responsavel_ex_paciente: 'Resp. paciente',
   parceiro: 'Parceiro',
 }
 
@@ -56,69 +32,103 @@ const planoLabels: Record<string, string> = {
   sulamerica: 'SulAmérica',
 }
 
+function convenioDoLead(t: LeadComEtapa): string {
+  if (t.plano_saude) return planoLabels[t.plano_saude] ?? t.plano_saude
+  if (t.paciente?.convenio_raw) return t.paciente.convenio_raw
+  if (t.forma_internacao === 'particular') return 'Particular'
+  return 'Sem convênio'
+}
+
 export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: triagem.id,
   })
+  const dados = useFunilDados()
 
   const isUrgent =
     triagem.observacoes?.toLowerCase().includes('urgente') ||
     triagem.observacoes?.toLowerCase().includes('crise')
 
-  const stage = (triagem.estagio_funil ?? 'em_atendimento') as EstagioFunil
-  const accent = isUrgent ? 'var(--stage-recusou)' : STAGE_VAR[stage]
+  const classif = triagem.paciente?.classificacao_cliente
+    ? classificacaoMeta(triagem.paciente.classificacao_cliente)
+    : null
 
-  const style: React.CSSProperties = {
-    borderLeftColor: accent,
-    ...(transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : {}),
+  const badges: CardBadge[] = [
+    {
+      label: triagem.tipo_contato
+        ? tipoContatoLabels[triagem.tipo_contato] ?? triagem.tipo_contato
+        : 'Lead',
+    },
+  ]
+  if (classif) badges.push({ label: classif.label, className: classif.badgeClass })
+  if (!triagem.conversation_id) {
+    badges.push({
+      label: 'Manual',
+      className: 'bg-brand-500/12 text-brand-700 dark:text-brand-400 border border-brand-500/25',
+    })
+  }
+  if (isUrgent) {
+    badges.push({
+      label: 'Urgente',
+      className: 'bg-danger-500/12 text-danger-700 dark:text-danger-500 border border-danger-500/25',
+    })
   }
 
+  // Contatos associados: os leads conciliados ao mesmo paciente (o próprio incluso).
+  const associados = dados.leadsDoPaciente(triagem.paciente_id)
+  const contatos = (associados.length ? associados : [triagem])
+    .map((l) => l.contact_name)
+    .filter((n): n is string => !!n)
+  const contatosUnicos = Array.from(new Set(contatos))
+
+  const internacoes = triagem.paciente
+    ? [
+        triagem.paciente.data_emissao_min,
+        triagem.paciente.penultima_internacao,
+        triagem.paciente.data_emissao_max,
+      ].filter((d, i, arr) => !!d && arr.indexOf(d) === i).length
+    : 0
+  const base = associados.length ? associados : [triagem]
+  const contadores = {
+    internacoes: internacoes + base.filter((l) => l.etapa === 'internacao').length,
+    perdas: base.filter((l) => l.etapa === 'perdido' || !!l.motivo_perda).length,
+    conversas: base.filter((l) => !!l.conversation_id).length,
+  }
+
+  const agendamento = dados.proximoDoLead(triagem.id)
+  const cpf = triagem.cpf ?? triagem.paciente?.cpf ?? null
+
+  const accent = isUrgent ? 'var(--stage-recusou)' : FUNIL_ETAPA_VAR[triagem.etapa]
+
   return (
-    <div
+    <CardBase
       ref={!isDragOverlay ? setNodeRef : undefined}
-      style={style}
       {...(!isDragOverlay ? { ...attributes, ...listeners } : {})}
       onClick={onClick}
-      className={`bg-surface-secondary border border-border border-l-[3px] rounded-lg p-3 shadow-card cursor-grab active:cursor-grabbing transition-[transform,box-shadow,border-color] duration-150 hover:border-border-hover hover:shadow-card-hover hover:-translate-y-px ${
-        isDragging ? 'opacity-30' : ''
-      } ${isDragOverlay ? 'shadow-elevated scale-[1.02] cursor-grabbing' : ''} ${
-        isUrgent ? 'ring-1 ring-danger-500/30' : ''
-      }`}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <Badge variant="default" className="text-[11px] px-1.5">
-          {triagem.tipo_contato
-            ? tipoContatoLabels[triagem.tipo_contato] ?? triagem.tipo_contato
-            : 'Lead'}
-        </Badge>
-        <span
-          className={`flex items-center gap-1 text-[11px] font-mono tabular-nums ${getTimeColor(triagem.updated_at)}`}
-        >
-          <Clock size={10} />
-          {formatDuration(triagem.updated_at)}
-        </span>
-      </div>
-
-      <p className="text-sm font-medium text-content-primary truncate">
-        {triagem.contact_name ?? 'Sem nome'}
-      </p>
-
-      <p className="text-[13px] text-content-secondary truncate mt-0.5">
-        {triagem.plano_saude
-          ? planoLabels[triagem.plano_saude] ?? triagem.plano_saude
-          : triagem.forma_internacao === 'particular'
-          ? 'Particular'
-          : 'Sem convênio'}
-      </p>
-
-      {isUrgent && (
-        <div className="flex items-center gap-1.5 mt-2">
-          <Badge variant="danger" className="text-[10px] px-1.5">
-            <AlertTriangle size={10} />
-            Urgente
-          </Badge>
-        </div>
-      )}
-    </div>
+      style={transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined}
+      className={`cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-30' : ''} ${
+        isDragOverlay ? 'shadow-elevated scale-[1.02] cursor-grabbing' : ''
+      } ${isUrgent ? 'ring-1 ring-danger-500/30' : ''}`}
+      accent={accent}
+      badges={badges}
+      nome={triagem.contact_name ?? triagem.paciente?.nome_cliente ?? 'Sem nome'}
+      documento={cpf ? formatarCpf(cpf) : null}
+      convenio={convenioDoLead(triagem)}
+      contatos={contatosUnicos}
+      agente={dados.nomeAgente(triagem.atendente_id)}
+      contadores={contadores}
+      proximo={{
+        data: agendamento?.data ?? null,
+        nota: agendamento?.nota ?? null,
+        situacao: situacaoAgendamento(agendamento),
+      }}
+      extra={
+        triagem.etapa === 'perdido' && triagem.motivo_perda ? (
+          <p className="mt-2 text-[11px] text-danger-600 dark:text-danger-500 truncate">
+            Perda: {MOTIVO_PERDA_LABELS[triagem.motivo_perda] ?? triagem.motivo_perda}
+          </p>
+        ) : undefined
+      }
+    />
   )
 }

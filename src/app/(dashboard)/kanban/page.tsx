@@ -3,7 +3,8 @@ import { KanbanView } from '@/components/kanban/view'
 import { ViewSwitcher } from '@/components/kanban/view-switcher'
 import { PacientesView } from '@/components/kanban/pacientes/pacientes-view'
 import { createClient } from '@/lib/supabase/server'
-import type { Triagem } from '@/types'
+import { PACIENTE_RESUMO_FIELDS } from '@/types'
+import type { PacienteResumo, Triagem, TriagemLead } from '@/types'
 
 export const revalidate = 0
 
@@ -15,7 +16,7 @@ export default async function KanbanPage({ searchParams }: PageProps) {
   const { view } = await searchParams
   const isPacientes = view === 'pacientes'
 
-  let leads: Triagem[] = []
+  let leads: TriagemLead[] = []
   let leadsError: string | null = null
 
   if (!isPacientes) {
@@ -25,28 +26,42 @@ export default async function KanbanPage({ searchParams }: PageProps) {
       .select('*')
       .order('updated_at', { ascending: false })
       .limit(500)
-    leads = (data ?? []) as Triagem[]
+    leads = ((data ?? []) as Triagem[]).map((t) => ({ ...t }))
     leadsError = error?.message ?? null
+
+    // Concilia lead ↔ paciente: busca em lote os pacientes vinculados via paciente_id.
+    const pacienteIds = Array.from(
+      new Set(leads.map((t) => t.paciente_id).filter((id): id is string => !!id))
+    )
+    if (pacienteIds.length > 0) {
+      const { data: pacientes } = await supabase
+        .from('pacientes')
+        .select(PACIENTE_RESUMO_FIELDS)
+        .in('id', pacienteIds)
+      const byId = new Map(
+        ((pacientes ?? []) as PacienteResumo[]).map((p) => [p.id, p])
+      )
+      for (const lead of leads) {
+        lead.paciente = lead.paciente_id ? byId.get(lead.paciente_id) ?? null : null
+      }
+    }
   }
 
-  return (
-    <>
-      <Header
-        title={isPacientes ? 'Pacientes' : 'Kanban'}
-        subtitle={isPacientes ? 'Base de reativação de ex-pacientes' : 'Funil de atendimento'}
-      />
+  // Header e alternador de visão são renderizados por cada view (client), porque a
+  // busca do header controla o filtro do funil.
+  if (isPacientes) return <PacientesView />
 
-      <ViewSwitcher current={isPacientes ? 'pacientes' : 'leads'} />
-
-      {isPacientes ? (
-        <PacientesView />
-      ) : leadsError ? (
+  if (leadsError) {
+    return (
+      <>
+        <Header title="Funil" subtitle="Funil unificado — leads e pacientes" />
+        <ViewSwitcher current="leads" />
         <div className="bg-danger-500/10 border border-danger-500/30 rounded-lg p-4 text-sm text-danger-500">
           Erro ao carregar dados: {leadsError}
         </div>
-      ) : (
-        <KanbanView triagens={leads} />
-      )}
-    </>
-  )
+      </>
+    )
+  }
+
+  return <KanbanView triagens={leads} />
 }

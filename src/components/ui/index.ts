@@ -1,6 +1,6 @@
 export { Button } from './button'
 export { Card, CardHeader, CardTitle, CardContent } from './card'
-export { Badge, StageBadge } from './badge'
+export { Badge, StageBadge, EtapaBadge } from './badge'
 export { Input } from './input'
 export { Select } from './select'
 export { Modal } from './modal'

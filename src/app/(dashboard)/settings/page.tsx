@@ -1,6 +1,7 @@
 import { Database, MessageSquare, Workflow, ExternalLink, Hospital } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui'
+import { Cadastros } from '@/components/settings/cadastros'
 
 interface IntegrationProps {
   icon: React.ReactNode
@@ -146,23 +147,21 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Estágios do funil</CardTitle>
+          <CardTitle>Etapas do funil</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-xs text-content-secondary mb-3">
-            Os contatos passam por estes estágios no funil de atendimento, do primeiro
-            contato até a internação confirmada.
+            Os contatos passam por estas etapas, do primeiro contato até a internação. Leads sem
+            desfecho positivo vão para <strong>Perdido</strong> (o motivo é registrado à parte).
           </p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
             {[
-              ['Novo contato', 'bg-neutral-500'],
+              ['Contato', 'bg-neutral-500'],
               ['Atendendo', 'bg-info-500'],
-              ['Consultando convênio', 'bg-warning-500'],
-              ['Autorizado pelo convênio', 'bg-brand-500'],
-              ['Paciente a caminho', 'bg-info-500'],
-              ['Hospital recepção', 'bg-brand-400'],
-              ['Internação confirmada', 'bg-success-500'],
-              ['Recusou internação', 'bg-danger-500'],
+              ['Negociando', 'bg-warning-500'],
+              ['Elegível', 'bg-brand-500'],
+              ['Internação', 'bg-success-500'],
+              ['Perdido', 'bg-danger-500'],
             ].map(([label, color]) => (
               <div
                 key={label}
@@ -175,6 +174,10 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="mt-4">
+        <Cadastros />
+      </div>
     </>
   )
 }
