@@ -16,6 +16,7 @@ import {
 } from '@/lib/reports'
 import { healthPlanBreakdown, assuntoDistribution } from '@/lib/metrics'
 import type { Triagem } from '@/types'
+import { requireGestor } from '@/lib/auth'
 
 export const revalidate = 0
 
@@ -26,6 +27,7 @@ function EmptyChart({ message = 'Sem dados ainda' }: { message?: string }) {
 }
 
 export default async function ReportsPage() {
+  await requireGestor()
   const supabase = await createClient()
   const { data } = await supabase
     .from('triagem_hsm')

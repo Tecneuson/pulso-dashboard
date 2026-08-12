@@ -31,6 +31,7 @@ const navSections = [
   },
   {
     label: 'Análise',
+    adminOnly: true,
     items: [
       { href: '/dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
       { href: '/reports' as const, label: 'Relatórios', icon: BarChart3 },
@@ -38,6 +39,7 @@ const navSections = [
   },
   {
     label: 'Sistema',
+    adminOnly: true,
     items: [{ href: '/settings' as const, label: 'Configurações', icon: Settings }],
   },
 ]
@@ -111,7 +113,9 @@ export function Sidebar({ user }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 py-3 px-2 overflow-y-auto">
-        {navSections.map((section) => (
+        {navSections
+          .filter((section) => user?.role === 'admin' || !('adminOnly' in section))
+          .map((section) => (
           <div key={section.label} className="mb-4 last:mb-0">
             {!collapsed && (
               <p className="px-3 mb-1 text-overline uppercase text-white/45 select-none">

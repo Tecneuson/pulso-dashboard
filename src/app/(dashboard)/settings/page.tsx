@@ -2,6 +2,7 @@ import { Database, MessageSquare, Workflow, ExternalLink, Hospital } from 'lucid
 import { Header } from '@/components/layout/header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui'
 import { Cadastros } from '@/components/settings/cadastros'
+import { requireGestor } from '@/lib/auth'
 
 interface IntegrationProps {
   icon: React.ReactNode
@@ -54,7 +55,8 @@ function Integration({ icon, title, status, description, url }: IntegrationProps
   )
 }
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  await requireGestor()
   const chatwootUrl = process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 
