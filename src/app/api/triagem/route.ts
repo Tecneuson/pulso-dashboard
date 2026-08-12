@@ -28,6 +28,11 @@ const SYNCABLE: (keyof Triagem)[] = [
   'motivo_desqualificacao',
   'paciente_id',
   'contact_name',
+  'data_nascimento',
+  // Dados de contato: só gravam no banco. O webhook do Chatwoot não mexe neles
+  // (o mapeamento cobre apenas atributos customizados), então não são sobrescritos.
+  'phone',
+  'email',
   'numero_paciente',
   'origem_conversa',
   'origem_hospital_id',
@@ -41,6 +46,7 @@ const CREATABLE: (keyof Triagem)[] = [
   'contact_name',
   'phone',
   'email',
+  'data_nascimento',
   'tipo_contato',
   'plano_saude',
   'motivo_contato',

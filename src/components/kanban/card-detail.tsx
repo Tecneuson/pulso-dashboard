@@ -185,6 +185,9 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
     if (!triagem) return
     setForm({
       etapa: triagem.etapa,
+      phone: triagem.phone ?? '',
+      email: triagem.email ?? '',
+      data_nascimento: triagem.data_nascimento ?? '',
       tipo_contato: triagem.tipo_contato ?? '',
       assunto: triagem.assunto ?? '',
       motivo_contato: triagem.motivo_contato ?? '',
@@ -204,7 +207,8 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
     setPaciente(triagem.paciente ?? null)
     setBusca('')
     setResultados([])
-    setShowMoreFields(false)
+    // Lead manual: já abre com todos os campos do cadastro à vista, para editar direto.
+    setShowMoreFields(!triagem.conversation_id)
     setShowMoreContatos(false)
     setPainel(autoInternar ? 'internacao' : 'none')
     setNotaTexto('')
@@ -352,6 +356,9 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
     }
     const payload: Record<string, unknown> = {
       numero_paciente: numeroPaciente.trim() || null,
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      data_nascimento: form.data_nascimento || null,
       tipo_contato: form.tipo_contato || null,
       assunto: form.assunto || null,
       motivo_contato: form.motivo_contato || null,
@@ -960,6 +967,35 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
                   })}
                 </div>
               )}
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Telefone">
+                <input
+                  value={form.phone}
+                  onChange={(e) => set('phone', e.target.value)}
+                  placeholder="(00) 00000-0000"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="E-mail">
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set('email', e.target.value)}
+                  placeholder="email@exemplo.com"
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+
+            <Field label="Data de nascimento">
+              <input
+                type="date"
+                value={form.data_nascimento}
+                onChange={(e) => set('data_nascimento', e.target.value)}
+                className={inputCls}
+              />
             </Field>
 
             <Field label="Etapa do funil">

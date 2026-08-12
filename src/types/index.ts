@@ -36,11 +36,9 @@ export const PLANO_SAUDE = [
 ] as const
 export type PlanoSaude = (typeof PLANO_SAUDE)[number]
 
-export const MOTIVO_CONTATO = [
-  'transtorno_mental_adulto',
-  'transtorno_mental_infantojuvenil',
-  'abuso_de_substancias',
-] as const
+// Motivo do contato: TM (transtorno mental) ou TUS (abuso de substâncias).
+// A distinção adulto/infantojuvenil saiu daqui e passou a vir da data de nascimento.
+export const MOTIVO_CONTATO = ['transtorno_mental', 'abuso_de_substancias'] as const
 export type MotivoContato = (typeof MOTIVO_CONTATO)[number]
 
 // Funil canônico — espelha os valores de `estagio_no_funil` do Chatwoot (fonte da verdade).
@@ -153,6 +151,7 @@ export interface Triagem {
   tags: string[] | null
   paciente_id: string | null
   cpf: string | null
+  data_nascimento: string | null
   // Origem da conversa + número do paciente (colunas novas)
   numero_paciente: string | null
   origem_conversa: string | null
@@ -284,6 +283,8 @@ export interface Hospital {
 export interface Captador {
   id: string
   nome: string
+  /** Tipo do captador — mesma taxonomia de origem (interhospitalar, consultor, etc.). */
+  tipo?: string | null
   telefone?: string | null
   email?: string | null
   observacoes?: string | null

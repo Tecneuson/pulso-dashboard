@@ -3,13 +3,15 @@
 import { useMemo, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
-import { Button, Input } from '@/components/ui'
+import { Button, Input, Select } from '@/components/ui'
+import { ORIGEM_CONVERSA_LABELS, ORIGEM_CONVERSA_OPTIONS, type OrigemConversa } from '@/lib/funil-etapas'
 import { useCaptadores } from '@/lib/api-store'
 
 export function CaptadoresView() {
   const { items, add, update, remove, error } = useCaptadores()
   const [busca, setBusca] = useState('')
   const [nome, setNome] = useState('')
+  const [tipo, setTipo] = useState('')
   const [telefone, setTelefone] = useState('')
   const [email, setEmail] = useState('')
   const [observacoes, setObservacoes] = useState('')
@@ -29,10 +31,15 @@ export function CaptadoresView() {
       setAviso('Informe o nome do captador.')
       return
     }
+    if (!tipo) {
+      setAviso('Informe o tipo do captador.')
+      return
+    }
     setSalvando(true)
     setAviso(null)
     const criado = await add({
       nome: nome.trim(),
+      tipo: tipo || null,
       telefone: telefone.trim() || null,
       email: email.trim() || null,
       observacoes: observacoes.trim() || null,
@@ -43,6 +50,7 @@ export function CaptadoresView() {
       return
     }
     setNome('')
+    setTipo('')
     setTelefone('')
     setEmail('')
     setObservacoes('')
@@ -62,6 +70,11 @@ export function CaptadoresView() {
           <h2 className="text-sm font-semibold text-content-primary mb-3">Novo captador</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <Input placeholder="Nome *" value={nome} onChange={(e) => setNome(e.target.value)} />
+            <Select
+              options={[{ value: '', label: 'Tipo *' }, ...ORIGEM_CONVERSA_OPTIONS]}
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value)}
+            />
             <Input
               placeholder="Telefone"
               value={telefone}
@@ -107,6 +120,11 @@ export function CaptadoresView() {
                   <div className="min-w-0">
                     <p className="text-sm text-content-primary truncate">
                       {c.nome}
+                      {c.tipo && (
+                        <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full border border-border text-content-secondary align-middle">
+                          {ORIGEM_CONVERSA_LABELS[c.tipo as OrigemConversa] ?? c.tipo}
+                        </span>
+                      )}
                       {!c.ativo && (
                         <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full bg-surface-tertiary text-content-tertiary border border-border">
                           inativo

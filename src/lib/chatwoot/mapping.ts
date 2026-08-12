@@ -68,11 +68,11 @@ const paraQuemMap: Record<string, string> = {
   amigo: 'Amigo(a)',
 }
 
-// Campo NOVO `motivo_contato_crm` (contato, list TM/KIDS/TUS) — só o dashboard escreve nele,
-// o n8n não toca; por isso o valor "cola". Chave separada do `motivo_do_contato` do n8n.
+// Campo `motivo_contato_crm` (contato, list TM/TUS) — só o dashboard escreve nele, o n8n
+// não toca. A distinção adulto/infantojuvenil deixou de ser um valor de motivo e passou a
+// vir da `data_de_nascimento`. Chave separada do `motivo_do_contato` do n8n.
 const motivoContatoMap: Record<string, string> = {
-  transtorno_mental_adulto: 'TM',
-  transtorno_mental_infantojuvenil: 'KIDS',
+  transtorno_mental: 'TM',
   abuso_de_substancias: 'TUS',
 }
 
@@ -111,6 +111,8 @@ export const FIELD_MAPS: FieldMap[] = [
 export const OBSERVACOES_KEY = 'observacoes'
 /** Custom attribute (conversa) derivado: paciente foi internado? */
 export const VENDA_KEY = 'venda'
+/** Custom attribute (contato, date) — data de nascimento do paciente. */
+export const DATA_NASCIMENTO_KEY = 'data_de_nascimento'
 
 function reverse(m: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(m).map(([k, v]) => [v, k]))
@@ -132,6 +134,9 @@ export function contactAttrsFromTriagem(t: Partial<Triagem>): Record<string, str
     if (f.level !== 'contact') continue
     const v = t[f.triagemField] as string | null | undefined
     if (v && f.slugToLabel[v]) out[f.chatwootKey] = f.slugToLabel[v]
+  }
+  if (typeof t.data_nascimento === 'string' && t.data_nascimento) {
+    out[DATA_NASCIMENTO_KEY] = t.data_nascimento
   }
   return out
 }
@@ -167,5 +172,7 @@ export function triagemFromChatwoot(
   }
   const obs = convAttrs[OBSERVACOES_KEY]
   if (typeof obs === 'string') out.observacoes = obs
+  const dn = contactAttrs[DATA_NASCIMENTO_KEY]
+  if (typeof dn === 'string' && dn) out.data_nascimento = dn.slice(0, 10)
   return out
 }

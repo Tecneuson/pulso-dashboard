@@ -82,13 +82,14 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
           origem_profissional_tipo: origem.origem_profissional_tipo,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'erro')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `erro HTTP ${res.status}`)
       onCreated(data.triagem as TriagemLead)
       fechar()
     } catch (e) {
       console.error('Falha ao criar lead:', e)
-      setErro('Falha ao criar o lead. Tente novamente.')
+      // Mostra o motivo real (ex.: RLS recusando o insert) — sem isso o erro fica invisível.
+      setErro(e instanceof Error ? `Falha ao criar o lead: ${e.message}` : 'Falha ao criar o lead.')
     } finally {
       setSaving(false)
     }

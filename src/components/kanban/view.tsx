@@ -7,7 +7,6 @@ import { KanbanBoard } from './board'
 import { CardDetail } from './card-detail'
 import { LeadForm } from './lead-form'
 import { Filtros } from './filtros'
-import { ViewSwitcher } from './view-switcher'
 import { FunilDadosProvider } from './funil-dados'
 import { Button } from '@/components/ui'
 import type { TriagemLead } from '@/types'
@@ -115,8 +114,6 @@ export function KanbanView({ triagens }: KanbanViewProps) {
               </Button>
             }
           />
-
-          <ViewSwitcher current="leads" />
 
           <Filtros
             leads={allLeads}

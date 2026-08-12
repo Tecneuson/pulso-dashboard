@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     .from('captadores')
     .insert({
       nome,
+      tipo: body.tipo ?? null,
       telefone: body.telefone ?? null,
       email: body.email ?? null,
       observacoes: body.observacoes ?? null,
@@ -54,7 +55,7 @@ export async function PATCH(request: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
 
   const patch: Record<string, unknown> = {}
-  for (const k of ['nome', 'telefone', 'email', 'observacoes', 'ativo'] as const) {
+  for (const k of ['nome', 'tipo', 'telefone', 'email', 'observacoes', 'ativo'] as const) {
     if (k in body) patch[k] = body[k]
   }
 
