@@ -8,7 +8,11 @@ import {
   setConversationLabels,
   postPrivateNote,
 } from '@/lib/chatwoot/client'
-import { contactAttrsFromTriagem, conversationAttrsFromTriagem } from '@/lib/chatwoot/mapping'
+import {
+  contactAttrsFromTriagem,
+  conversationAttrsFromTriagem,
+  ETAPA_CONTATO_LABEL,
+} from '@/lib/chatwoot/mapping'
 import type { Triagem } from '@/types'
 
 // Campos do triagem_hsm que o dashboard pode editar. Os que têm mapeamento em
@@ -190,7 +194,7 @@ export async function PATCH(request: NextRequest) {
       // Etapa "Contato" grava estagio_funil=null; limpa o rótulo antigo no Chatwoot
       // (o mapeamento ignora valores nulos, senão o atributo ficaria preso no valor anterior).
       if ('estagio_funil' in patch && patch.estagio_funil === null) {
-        contactAttrs['estagio_no_funil'] = ''
+        contactAttrs['estagio_no_funil'] = ETAPA_CONTATO_LABEL
         convAttrs['venda'] = 'Não'
       }
 

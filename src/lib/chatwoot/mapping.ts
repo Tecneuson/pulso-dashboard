@@ -1,5 +1,11 @@
 import type { Triagem } from '@/types'
-import { ESTAGIO_FUNIL_LABELS } from '@/types'
+import { ESTAGIO_FUNIL } from '@/types'
+import {
+  ETAPA_TO_ESTAGIO,
+  FUNIL_ETAPAS,
+  FUNIL_ETAPA_LABELS,
+  etapaFromEstagio,
+} from '@/lib/funil-etapas'
 
 /**
  * Tradução de valores entre o triagem_hsm (slugs) e os custom attributes do Chatwoot (rótulos).
@@ -13,9 +19,29 @@ interface FieldMap {
   level: Level
   chatwootKey: string
   slugToLabel: Record<string, string>
+  /** Volta explícita (Chatwoot → banco) quando vários slugs compartilham o mesmo rótulo. */
+  labelToSlug?: Record<string, string>
 }
 
-const estagioMap: Record<string, string> = { ...ESTAGIO_FUNIL_LABELS }
+/**
+ * Funil: o Chatwoot mostra as MESMAS 6 etapas do CRM (Contato → Atendendo → Negociando →
+ * Rastreio → Internação, + Perdido). O banco continua guardando os 10 slugs granulares;
+ * a tradução acontece aqui, nos dois sentidos. "Contato" = estagio_funil null.
+ */
+const estagioMap: Record<string, string> = Object.fromEntries(
+  ESTAGIO_FUNIL.map((slug) => [slug, FUNIL_ETAPA_LABELS[etapaFromEstagio(slug)]])
+)
+
+/** Rótulo da etapa → slug canônico do banco (o inverso de ETAPA_TO_ESTAGIO). */
+const estagioLabelToSlug: Record<string, string> = Object.fromEntries(
+  FUNIL_ETAPAS.filter((e) => ETAPA_TO_ESTAGIO[e]).map((e) => [
+    FUNIL_ETAPA_LABELS[e],
+    ETAPA_TO_ESTAGIO[e] as string,
+  ])
+)
+
+/** Rótulo da etapa "Contato" — no banco equivale a estagio_funil = null. */
+export const ETAPA_CONTATO_LABEL = FUNIL_ETAPA_LABELS.contato
 
 const planoMap: Record<string, string> = {
   alice: 'Alice',
@@ -98,7 +124,13 @@ const motivoPerdaMap: Record<string, string> = {
 }
 
 export const FIELD_MAPS: FieldMap[] = [
-  { triagemField: 'estagio_funil', level: 'contact', chatwootKey: 'estagio_no_funil', slugToLabel: estagioMap },
+  {
+    triagemField: 'estagio_funil',
+    level: 'contact',
+    chatwootKey: 'estagio_no_funil',
+    slugToLabel: estagioMap,
+    labelToSlug: estagioLabelToSlug,
+  },
   { triagemField: 'plano_saude', level: 'contact', chatwootKey: 'plano_de_saude', slugToLabel: planoMap },
   { triagemField: 'tipo_contato', level: 'contact', chatwootKey: 'quem_e_o_contato', slugToLabel: tipoContatoMap },
   { triagemField: 'para_quem', level: 'contact', chatwootKey: 'para_quem_e_a_solicitacao', slugToLabel: paraQuemMap },
@@ -172,10 +204,12 @@ export function triagemFromChatwoot(
     const src = f.level === 'contact' ? contactAttrs : convAttrs
     const label = src[f.chatwootKey]
     if (label != null && label !== '') {
-      const slug = reverse(f.slugToLabel)[String(label)]
+      const slug = (f.labelToSlug ?? reverse(f.slugToLabel))[String(label)]
       if (slug) (out as Record<string, unknown>)[f.triagemField] = slug
     }
   }
+  // Etapa "Contato" no Chatwoot = sem estágio no banco (o atendente pode voltar o card pra lá).
+  if (contactAttrs['estagio_no_funil'] === ETAPA_CONTATO_LABEL) out.estagio_funil = null
   const obs = convAttrs[OBSERVACOES_KEY]
   if (typeof obs === 'string') out.observacoes = obs
   const dn = contactAttrs[DATA_NASCIMENTO_KEY]
