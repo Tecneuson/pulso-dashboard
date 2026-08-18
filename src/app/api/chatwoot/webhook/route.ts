@@ -32,6 +32,34 @@ export async function POST(request: NextRequest) {
   const event: string | undefined = body.event
   const admin = createAdminClient()
 
+  /**
+   * Grava só o que REALMENTE mudou. Sem isso, um update com valores idênticos ainda
+   * dispara o database webhook do Supabase → n8n → Chatwoot → este webhook de novo,
+   * criando um loop de eco infinito.
+   */
+  async function updateSeMudou(convId: string, patch: AnyObj): Promise<string[]> {
+    const campos = Object.keys(patch)
+    if (!campos.length) return []
+    const { data: atual } = await admin
+      .from('triagem_hsm')
+      .select(campos.join(','))
+      .eq('conversation_id', convId)
+      .maybeSingle()
+    const row = (atual ?? {}) as AnyObj
+    const diff: AnyObj = {}
+    for (const k of campos) {
+      const a = row[k]
+      const b = patch[k]
+      const igual = Array.isArray(a) && Array.isArray(b)
+        ? JSON.stringify(a) === JSON.stringify(b)
+        : (a ?? null) === (b ?? null)
+      if (!igual) diff[k] = b
+    }
+    if (!Object.keys(diff).length) return []
+    await admin.from('triagem_hsm').update(diff).eq('conversation_id', convId)
+    return Object.keys(diff)
+  }
+
   try {
     if (event === 'conversation_updated' || event === 'conversation_created') {
       const convId = String(body.id ?? body.display_id ?? '')
@@ -42,10 +70,8 @@ export async function POST(request: NextRequest) {
       const patch: AnyObj = { ...triagemFromChatwoot(contactAttrs, convAttrs) }
       if (Array.isArray(body.labels)) patch.tags = body.labels
 
-      if (Object.keys(patch).length) {
-        await admin.from('triagem_hsm').update(patch).eq('conversation_id', convId)
-      }
-      return NextResponse.json({ ok: true, event, convId, fields: Object.keys(patch) })
+      const mudou = await updateSeMudou(convId, patch)
+      return NextResponse.json({ ok: true, event, convId, fields: mudou })
     }
 
     if (event === 'contact_updated') {
@@ -54,11 +80,12 @@ export async function POST(request: NextRequest) {
       const patch = triagemFromChatwoot(contactAttrs, {})
       if (contactId && Object.keys(patch).length) {
         const convs = await getContactConversations(contactId)
+        const mudou: string[] = []
         for (const c of convs) {
           const cid = String(c.id ?? c.display_id ?? '')
-          if (cid) await admin.from('triagem_hsm').update(patch).eq('conversation_id', cid)
+          if (cid) mudou.push(...(await updateSeMudou(cid, patch)))
         }
-        return NextResponse.json({ ok: true, event, contactId, convs: convs.length, fields: Object.keys(patch) })
+        return NextResponse.json({ ok: true, event, contactId, convs: convs.length, fields: mudou })
       }
       return NextResponse.json({ ok: true, event, skipped: true })
     }

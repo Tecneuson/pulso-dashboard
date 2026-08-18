@@ -56,15 +56,30 @@ export async function getContactConversations(
   return Array.isArray(r) ? r : r?.payload ?? []
 }
 
-/** Merge de custom attributes na CONVERSA (endpoint dedicado já faz merge). */
+/**
+ * Merge de custom attributes na CONVERSA.
+ * ⚠️ O endpoint do Chatwoot SUBSTITUI o objeto inteiro — mandar só um atributo apaga os
+ * demais (já apagou `assunto_da_conversa` e `bot_pausado` em produção). Então lemos os
+ * atuais e enviamos o conjunto mesclado.
+ */
 export async function updateConversationCustomAttributes(
   conversationId: string | number,
-  attrs: Record<string, unknown>
+  attrs: Record<string, unknown>,
+  existing?: Record<string, unknown>
 ): Promise<void> {
   if (Object.keys(attrs).length === 0) return
+  let base = existing
+  if (!base) {
+    try {
+      const conv = await getConversation(conversationId)
+      base = conv?.custom_attributes ?? {}
+    } catch {
+      base = {}
+    }
+  }
   await cw(`/conversations/${conversationId}/custom_attributes`, {
     method: 'POST',
-    body: JSON.stringify({ custom_attributes: attrs }),
+    body: JSON.stringify({ custom_attributes: { ...base, ...attrs } }),
   })
 }
 

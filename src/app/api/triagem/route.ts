@@ -222,7 +222,8 @@ export async function PATCH(request: NextRequest) {
         await updateContactCustomAttributes(contactId, contactAttrs, conv.meta?.sender?.custom_attributes)
       }
       if (Object.keys(convAttrs).length) {
-        await updateConversationCustomAttributes(convId, convAttrs)
+        // passa os atributos atuais para MESCLAR (o endpoint do Chatwoot substitui tudo)
+        await updateConversationCustomAttributes(convId, convAttrs, conv.custom_attributes)
       }
       if (Array.isArray(patch.tags)) {
         await setConversationLabels(convId, patch.tags as string[])
