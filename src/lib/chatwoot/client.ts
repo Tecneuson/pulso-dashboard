@@ -100,6 +100,18 @@ export async function setConversationLabels(
   })
 }
 
+/** Cria uma NOTA PRIVADA (visível só à equipe, aba de notas) na conversa. */
+export async function postPrivateNote(
+  conversationId: string | number,
+  content: string
+): Promise<void> {
+  if (!content.trim()) return
+  await cw(`/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ content, message_type: 'outgoing', private: true }),
+  })
+}
+
 /** Best-effort: garante a definição do custom attribute `observacoes` (conversa, texto). */
 export async function ensureObservacoesDefinition(): Promise<void> {
   try {

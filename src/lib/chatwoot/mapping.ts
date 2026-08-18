@@ -152,7 +152,7 @@ export function conversationAttrsFromTriagem(t: Partial<Triagem>): Record<string
   if (t.estagio_funil !== undefined && t.estagio_funil !== null) {
     out[VENDA_KEY] = t.estagio_funil === 'internado' ? 'Sim' : 'Não'
   }
-  if (typeof t.observacoes === 'string') out[OBSERVACOES_KEY] = t.observacoes
+  // observacoes NÃO é mais atributo: vira nota privada na conversa (ver /api/triagem).
   return out
 }
 

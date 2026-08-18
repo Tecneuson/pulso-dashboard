@@ -6,6 +6,7 @@ import {
   updateContactCustomAttributes,
   updateConversationCustomAttributes,
   setConversationLabels,
+  postPrivateNote,
 } from '@/lib/chatwoot/client'
 import { contactAttrsFromTriagem, conversationAttrsFromTriagem } from '@/lib/chatwoot/mapping'
 import type { Triagem } from '@/types'
@@ -139,6 +140,17 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'paciente_id inválido' }, { status: 400 })
   }
 
+  // Observação anterior — para lançar nota no Chatwoot só quando realmente mudar.
+  let obsAntes: string | null = null
+  if ('observacoes' in patch) {
+    const { data: cur } = await supabase
+      .from('triagem_hsm')
+      .select('observacoes')
+      .eq('id', id)
+      .single()
+    obsAntes = (cur?.observacoes as string | null) ?? null
+  }
+
   // 1) Grava no banco (sessão autenticada → RLS)
   const { data: updated, error } = await supabase
     .from('triagem_hsm')
@@ -173,6 +185,11 @@ export async function PATCH(request: NextRequest) {
       }
       if (Array.isArray(patch.tags)) {
         await setConversationLabels(convId, patch.tags as string[])
+      }
+      // Observações → NOTA PRIVADA na conversa (não atributo). Só quando mudou e não vazio.
+      const obsNova = (patch.observacoes as string | null | undefined) ?? null
+      if (obsNova && obsNova.trim() && obsNova !== obsAntes) {
+        await postPrivateNote(convId, `📝 Observação (CRM): ${obsNova.trim()}`)
       }
       chatwoot = 'ok'
     } catch (e) {
