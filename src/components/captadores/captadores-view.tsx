@@ -28,11 +28,11 @@ export function CaptadoresView() {
 
   async function salvar() {
     if (!nome.trim()) {
-      setAviso('Informe o nome do captador.')
+      setAviso('Informe o nome do consultor.')
       return
     }
     if (!tipo) {
-      setAviso('Informe o tipo do captador.')
+      setAviso('Informe o tipo do consultor.')
       return
     }
     setSalvando(true)
@@ -46,7 +46,7 @@ export function CaptadoresView() {
     })
     setSalvando(false)
     if (!criado) {
-      setAviso('Não foi possível cadastrar o captador.')
+      setAviso('Não foi possível cadastrar o consultor.')
       return
     }
     setNome('')
@@ -59,15 +59,15 @@ export function CaptadoresView() {
   return (
     <>
       <Header
-        title="Captadores"
-        subtitle="Quem capta e indica leads e pacientes"
-        search={{ value: busca, onChange: setBusca, placeholder: 'Pesquisar captador' }}
+        title="Consultores"
+        subtitle="Quem indica leads e pacientes"
+        search={{ value: busca, onChange: setBusca, placeholder: 'Pesquisar consultor' }}
       />
 
       <div className="max-w-4xl space-y-5">
         {/* Cadastro */}
         <div className="rounded-xl border border-border bg-surface-secondary p-4">
-          <h2 className="text-sm font-semibold text-content-primary mb-3">Novo captador</h2>
+          <h2 className="text-sm font-semibold text-content-primary mb-3">Novo consultor</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <Input placeholder="Nome *" value={nome} onChange={(e) => setNome(e.target.value)} />
             <Select
@@ -91,7 +91,7 @@ export function CaptadoresView() {
             <p className="text-xs text-danger-500">{aviso ?? error ?? ''}</p>
             <Button size="sm" onClick={salvar} loading={salvando}>
               <Plus size={14} />
-              Adicionar captador
+              Adicionar consultor
             </Button>
           </div>
         </div>
@@ -100,7 +100,7 @@ export function CaptadoresView() {
         <div className="rounded-xl border border-border">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold text-content-primary">
-              Captadores cadastrados
+              Consultores cadastrados
               <span className="ml-2 text-content-tertiary font-normal tabular-nums">
                 {filtrados.length}
               </span>
@@ -110,8 +110,8 @@ export function CaptadoresView() {
           {filtrados.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-content-tertiary">
               {items.length === 0
-                ? 'Nenhum captador cadastrado ainda.'
-                : 'Nenhum captador encontrado para esta busca.'}
+                ? 'Nenhum consultor cadastrado ainda.'
+                : 'Nenhum consultor encontrado para esta busca.'}
             </p>
           ) : (
             <div className="divide-y divide-border">

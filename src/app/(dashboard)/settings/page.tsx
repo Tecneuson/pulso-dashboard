@@ -161,7 +161,7 @@ export default async function SettingsPage() {
               ['Contato', 'bg-neutral-500'],
               ['Atendendo', 'bg-info-500'],
               ['Negociando', 'bg-warning-500'],
-              ['Elegível', 'bg-brand-500'],
+              ['Rastreio', 'bg-brand-500'],
               ['Internação', 'bg-success-500'],
               ['Perdido', 'bg-danger-500'],
             ].map(([label, color]) => (

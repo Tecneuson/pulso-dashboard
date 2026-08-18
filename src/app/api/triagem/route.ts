@@ -30,6 +30,7 @@ const SYNCABLE: (keyof Triagem)[] = [
   'paciente_id',
   'contact_name',
   'data_nascimento',
+  'elegivel',
   // Dados de contato: só gravam no banco. O webhook do Chatwoot não mexe neles
   // (o mapeamento cobre apenas atributos customizados), então não são sobrescritos.
   'phone',
@@ -175,6 +176,26 @@ export async function PATCH(request: NextRequest) {
       if ('estagio_funil' in patch && patch.estagio_funil === null) {
         contactAttrs['estagio_no_funil'] = ''
         convAttrs['venda'] = 'Não'
+      }
+
+      // Origem da conversa → nomes do hospital/consultor nos atributos da conversa.
+      if ('origem_hospital_id' in patch || 'origem_conversa' in patch) {
+        const hid = updated?.origem_hospital_id as string | null | undefined
+        let nome = ''
+        if (hid) {
+          const { data: h } = await supabase.from('hospitais').select('nome').eq('id', hid).single()
+          nome = (h?.nome as string) ?? ''
+        }
+        convAttrs['hospital_origem'] = nome
+      }
+      if ('origem_consultor_id' in patch || 'origem_conversa' in patch) {
+        const cid = updated?.origem_consultor_id as string | null | undefined
+        let nome = ''
+        if (cid) {
+          const { data: c } = await supabase.from('consultores').select('nome').eq('id', cid).single()
+          nome = (c?.nome as string) ?? ''
+        }
+        convAttrs['consultor_origem'] = nome
       }
 
       if (contactId && Object.keys(contactAttrs).length) {

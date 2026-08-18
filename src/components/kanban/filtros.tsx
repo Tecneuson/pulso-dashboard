@@ -34,8 +34,10 @@ const DIM_LABEL: Record<string, string> = {
   assuntos: 'Assunto',
   tipos: 'Tipo',
   origens: 'Origem',
-  captadores: 'Captador',
-  consultores: 'Consultor',
+  // `captadores` é a dimensão do vínculo direto do lead (coluna captador_id) —
+  // rotulada só como "Consultor"; `consultores` é o consultor da origem da conversa.
+  captadores: 'Consultor',
+  consultores: 'Consultor (origem)',
   hospitais: 'Hospital',
   profissionais: 'Profissional',
   motivosPerda: 'Motivo da perda',
@@ -550,8 +552,8 @@ export function Filtros({ leads, filtrados, filtros, onChange }: FiltrosProps) {
               <Secao titulo="Origem & pessoas">
                 <ChipGroup label="Agente de atendimento" dim="atendentes" options={agenteOpts} filtros={filtros} leads={leads} onChange={onChange} />
                 <ChipGroup label="Origem da conversa" dim="origens" options={OPCOES.origens} filtros={filtros} leads={leads} onChange={onChange} />
-                <ChipGroup label="Captador" dim="captadores" options={captadorOpts} filtros={filtros} leads={leads} onChange={onChange} />
-                <ChipGroup label="Consultor" dim="consultores" options={consultorOpts} filtros={filtros} leads={leads} onChange={onChange} />
+                <ChipGroup label="Consultor" dim="captadores" options={captadorOpts} filtros={filtros} leads={leads} onChange={onChange} />
+                <ChipGroup label="Consultor (origem)" dim="consultores" options={consultorOpts} filtros={filtros} leads={leads} onChange={onChange} />
                 <ChipGroup label="Hospital" dim="hospitais" options={hospitalOpts} filtros={filtros} leads={leads} onChange={onChange} />
                 <ChipGroup label="Tipo de profissional" dim="profissionais" options={OPCOES.profissionais} filtros={filtros} leads={leads} onChange={onChange} />
               </Secao>

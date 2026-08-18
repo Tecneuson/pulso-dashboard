@@ -152,6 +152,8 @@ export interface Triagem {
   paciente_id: string | null
   cpf: string | null
   data_nascimento: string | null
+  /** Elegibilidade do contato (avaliada na conversa): true = Sim, false = Não, null = não avaliado. */
+  elegivel: boolean | null
   // Origem da conversa + número do paciente (colunas novas)
   numero_paciente: string | null
   origem_conversa: string | null

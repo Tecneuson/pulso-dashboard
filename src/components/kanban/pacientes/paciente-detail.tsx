@@ -147,7 +147,7 @@ export function PacienteDetail({ paciente, open, onClose }: PacienteDetailProps)
           <div className="md:pr-6 space-y-4">
             <h4 className="text-sm font-semibold text-content-primary">Campos de dados</h4>
 
-            {/* Captador — único campo editável do paciente (salva na hora) */}
+            {/* Consultor — único campo editável do paciente (salva na hora) */}
             <div>
               <CaptadorField value={captadorId} onChange={salvarCaptador} />
               {savingCaptador && (
@@ -157,7 +157,7 @@ export function PacienteDetail({ paciente, open, onClose }: PacienteDetailProps)
               )}
               {savedCaptador && !savingCaptador && (
                 <p className="text-xs text-success-600 dark:text-success-500 mt-1 flex items-center gap-1">
-                  <Check size={11} /> captador salvo
+                  <Check size={11} /> consultor salvo
                 </p>
               )}
             </div>

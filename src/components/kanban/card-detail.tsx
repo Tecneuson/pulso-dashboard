@@ -89,6 +89,12 @@ function withEmpty(opts?: { value: string; label: string }[]) {
   return [{ value: '', label: '—' }, ...(opts ?? [])]
 }
 
+/** Elegibilidade do contato (avaliada na conversa). Grava boolean no banco. */
+const ELEGIVEL_OPTIONS = [
+  { value: 'sim', label: 'Sim' },
+  { value: 'nao', label: 'Não' },
+]
+
 function formatDateTimeBR(iso: string | null): string {
   if (!iso) return '—'
   return formatDateBR(iso.slice(0, 10))
@@ -188,6 +194,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
       phone: triagem.phone ?? '',
       email: triagem.email ?? '',
       data_nascimento: triagem.data_nascimento ?? '',
+      elegivel: triagem.elegivel == null ? '' : triagem.elegivel ? 'sim' : 'nao',
       tipo_contato: triagem.tipo_contato ?? '',
       assunto: triagem.assunto ?? '',
       motivo_contato: triagem.motivo_contato ?? '',
@@ -359,6 +366,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
       data_nascimento: form.data_nascimento || null,
+      elegivel: form.elegivel ? form.elegivel === 'sim' : null,
       tipo_contato: form.tipo_contato || null,
       assunto: form.assunto || null,
       motivo_contato: form.motivo_contato || null,
@@ -1000,6 +1008,9 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
 
             <Field label="Etapa do funil">
               <Select options={FUNIL_ETAPA_OPTIONS} value={form.etapa} onChange={(e) => set('etapa', e.target.value)} />
+            </Field>
+            <Field label="Elegível">
+              <Select options={withEmpty(ELEGIVEL_OPTIONS)} value={form.elegivel} onChange={(e) => set('elegivel', e.target.value)} />
             </Field>
             <Field label="Tipo de contato">
               <Select options={withEmpty(FIELD_OPTIONS.tipo_contato)} value={form.tipo_contato} onChange={(e) => set('tipo_contato', e.target.value)} />

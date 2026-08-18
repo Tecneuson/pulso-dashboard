@@ -113,6 +113,11 @@ export const OBSERVACOES_KEY = 'observacoes'
 export const VENDA_KEY = 'venda'
 /** Custom attribute (contato, date) — data de nascimento do paciente. */
 export const DATA_NASCIMENTO_KEY = 'data_de_nascimento'
+/** Custom attribute (conversa, list Sim/Não) — elegibilidade avaliada na conversa. */
+export const ELEGIVEL_KEY = 'elegivel'
+/** Custom attributes (conversa) — origem da conversa, associada ao paciente. */
+export const HOSPITAL_ORIGEM_KEY = 'hospital_origem'
+export const CONSULTOR_ORIGEM_KEY = 'consultor_origem'
 
 function reverse(m: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(m).map(([k, v]) => [v, k]))
@@ -152,6 +157,7 @@ export function conversationAttrsFromTriagem(t: Partial<Triagem>): Record<string
   if (t.estagio_funil !== undefined && t.estagio_funil !== null) {
     out[VENDA_KEY] = t.estagio_funil === 'internado' ? 'Sim' : 'Não'
   }
+  if (typeof t.elegivel === 'boolean') out[ELEGIVEL_KEY] = t.elegivel ? 'Sim' : 'Não'
   // observacoes NÃO é mais atributo: vira nota privada na conversa (ver /api/triagem).
   return out
 }
@@ -174,5 +180,8 @@ export function triagemFromChatwoot(
   if (typeof obs === 'string') out.observacoes = obs
   const dn = contactAttrs[DATA_NASCIMENTO_KEY]
   if (typeof dn === 'string' && dn) out.data_nascimento = dn.slice(0, 10)
+  const el = convAttrs[ELEGIVEL_KEY]
+  if (el === 'Sim') out.elegivel = true
+  else if (el === 'Não') out.elegivel = false
   return out
 }

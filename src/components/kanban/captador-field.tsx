@@ -5,11 +5,14 @@ import { Check, Plus, X } from 'lucide-react'
 import { Select } from '@/components/ui'
 import { useCaptadores } from '@/lib/api-store'
 
-/** Campo controlado de Captador com cadastro inline. Serve para lead e paciente. */
+/**
+ * Campo controlado de Consultor com cadastro inline. Serve para lead e paciente.
+ * (a coluna/tabela no banco continua sendo `captador_id`/`captadores` — só o rótulo mudou.)
+ */
 export function CaptadorField({
   value,
   onChange,
-  label = 'Captador',
+  label = 'Consultor',
 }: {
   value: string | null
   onChange: (id: string | null) => void
@@ -62,7 +65,7 @@ export function CaptadorField({
               }
               if (e.key === 'Escape') setAdding(false)
             }}
-            placeholder="Nome do captador"
+            placeholder="Nome do consultor"
             className={inputCls}
           />
           <button
@@ -84,7 +87,7 @@ export function CaptadorField({
         </div>
       ) : (
         <Select
-          options={[{ value: '', label: 'Sem captador' }, ...opts]}
+          options={[{ value: '', label: 'Sem consultor' }, ...opts]}
           value={value ?? ''}
           onChange={(e) => onChange(e.target.value || null)}
         />

@@ -5,7 +5,9 @@ import type { EstagioFunil, TriagemLead } from '@/types'
  * que já existe no banco — nada aqui altera schema, Chatwoot ou n8n. As mudanças de
  * etapa feitas na tela são persistidas no navegador (localStorage), ver `local-store`.
  *
- * Etapas: Contato → Atendendo → Negociando → Elegível → Internação, + Perdido.
+ * Etapas: Contato → Atendendo → Negociando → Rastreio → Internação, + Perdido.
+ * (o slug interno da etapa "Rastreio" continua sendo `elegivel`, por compatibilidade
+ * com os dados já gravados em `estagio_funil`.)
  */
 
 export const FUNIL_ETAPAS = [
@@ -22,7 +24,7 @@ export const FUNIL_ETAPA_LABELS: Record<FunilEtapa, string> = {
   contato: 'Contato',
   atendendo: 'Atendendo',
   negociando: 'Negociando',
-  elegivel: 'Elegível',
+  elegivel: 'Rastreio',
   internacao: 'Internação',
   perdido: 'Perdido',
 }
