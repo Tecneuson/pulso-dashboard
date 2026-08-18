@@ -153,12 +153,28 @@ export async function PATCH(request: NextRequest) {
   }
 
   // 1) Grava no banco (sessão autenticada → RLS)
-  const { data: updated, error } = await supabase
+  let { data: updated, error } = await supabase
     .from('triagem_hsm')
     .update(patch)
     .eq('id', id)
     .select('*')
     .single()
+
+  // Rede de segurança: se alguma coluna ainda não existe no banco (migration pendente),
+  // remove só ela do patch e regrava, em vez de derrubar a edição inteira.
+  if (error && /column .* does not exist/i.test(error.message)) {
+    const col = error.message.match(/column "?[\w.]*?\.?(\w+)"? does not exist/i)?.[1]
+    if (col && col in patch) {
+      console.warn(`[triagem] coluna ausente no banco: ${col} — salvando sem ela`)
+      delete patch[col]
+      ;({ data: updated, error } = await supabase
+        .from('triagem_hsm')
+        .update(patch)
+        .eq('id', id)
+        .select('*')
+        .single())
+    }
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // 2) Empurra pro Chatwoot (best-effort — não falha a gravação do banco)
