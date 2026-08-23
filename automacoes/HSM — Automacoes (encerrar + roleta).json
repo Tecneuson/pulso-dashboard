@@ -1,0 +1,235 @@
+{
+  "name": "HSM — Automações (encerrar por inatividade + roleta)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "sched-0001-0001-0001-000000000001",
+      "name": "A cada 5 min"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "triagem_hsm",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "buscartri-0001-0001-0001-000000000002",
+      "name": "Buscar triagens",
+      "credentials": {
+        "supabaseApi": {
+          "id": "RPQ5xHbnhQNaPtvF",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://chatwoot-t7i7rjvs1n1dk406ji1twbjp.187.127.17.157.sslip.io/api/v1/accounts/1/conversations?status=open",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        440,
+        0
+      ],
+      "id": "buscarconv-0001-0001-0001-00000000003",
+      "name": "Buscar conversas abertas",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wEsXuLAQb5Nl4xD6",
+          "name": "Header Auth admin"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Encerra conversas por falta de interação, conforme a etapa do funil.\n// Contato 10min | Atendendo 30min | Negociando 30min | Rastreio: NUNCA fecha.\nconst LIMITES = { contato: 10, atendendo: 30, negociando: 30 };\n\nconst ESTAGIO_TO_ETAPA = {\n  em_atendimento: 'atendendo',\n  convenio_nao_legivel: 'negociando',\n  convenio_legivel: 'negociando',\n  em_avaliacao_hsm: 'negociando',\n  vaga_cedida: 'rastreio',          // Rastreio: nao fecha\n  internado: 'internacao',\n  vaga_recusada_medico: 'perdido',\n  recusou_origem: 'perdido',\n  recusou_internacao: 'perdido',\n  sem_condicoes_financeiras: 'perdido',\n};\n\n// indexa as triagens por conversation_id\nconst triagens = {};\nfor (const it of $('Buscar triagens').all()) {\n  const r = it.json || {};\n  if (r.conversation_id != null) triagens[String(r.conversation_id)] = r;\n}\n\nconst agora = Math.floor(Date.now() / 1000);\nconst out = [];\n\nfor (const item of $input.all()) {\n  const body = item.json || {};\n  const lista = (body.data && body.data.payload) || body.payload || [];\n  for (const c of lista) {\n    const id = String(c.id);\n    const t = triagens[id];\n    const etapa = t ? (ESTAGIO_TO_ETAPA[t.estagio_funil] || 'contato') : 'contato';\n    const limite = LIMITES[etapa];\n    if (!limite) continue;                     // rastreio/internacao/perdido: nao fecha\n    const last = Number(c.last_activity_at || c.timestamp || 0);\n    if (!last) continue;\n    const minutos = (agora - last) / 60;\n    if (minutos >= limite) {\n      out.push({ json: { conversation_id: id, etapa, minutos: Math.round(minutos), limite } });\n    }\n  }\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "calc-0001-0001-0001-000000000004",
+      "name": "Quais encerrar?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot-t7i7rjvs1n1dk406ji1twbjp.187.127.17.157.sslip.io/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/toggle_status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"status\": \"resolved\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        880,
+        0
+      ],
+      "id": "encerrar-0001-0001-0001-000000000005",
+      "name": "Encerrar conversa",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wEsXuLAQb5Nl4xD6",
+          "name": "Header Auth admin"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ROLETA: distribui conversas SEM atendente entre os atendentes, por ordem de chegada.\n// Ordem de chegada = ordem crescente do id da conversa. Round-robin sequencial.\nconst ATENDENTES = [6, 7, 8, 9]; // Angela, Kaylane, Larissa, Natali\n\nconst semAtendente = [];\nfor (const item of $input.all()) {\n  const body = item.json || {};\n  const lista = (body.data && body.data.payload) || body.payload || [];\n  for (const c of lista) {\n    const assignee = c.meta && c.meta.assignee;\n    if (!assignee || !assignee.id) semAtendente.push(c);\n  }\n}\n// ordem de chegada\nsemAtendente.sort((a, b) => Number(a.id) - Number(b.id));\n\nreturn semAtendente.map((c, i) => ({\n  json: { conversation_id: String(c.id), assignee_id: ATENDENTES[i % ATENDENTES.length] },\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        220
+      ],
+      "id": "roletacalc-0001-0001-0001-00000000006",
+      "name": "Roleta: quem atende?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot-t7i7rjvs1n1dk406ji1twbjp.187.127.17.157.sslip.io/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/assignments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"assignee_id\": {{ $json.assignee_id }} }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        880,
+        220
+      ],
+      "id": "roletaset-0001-0001-0001-000000000007",
+      "name": "Atribuir atendente",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wEsXuLAQb5Nl4xD6",
+          "name": "Header Auth admin"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "A cada 5 min": {
+      "main": [
+        [
+          {
+            "node": "Buscar triagens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar triagens": {
+      "main": [
+        [
+          {
+            "node": "Buscar conversas abertas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar conversas abertas": {
+      "main": [
+        [
+          {
+            "node": "Quais encerrar?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Roleta: quem atende?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quais encerrar?": {
+      "main": [
+        [
+          {
+            "node": "Encerrar conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Roleta: quem atende?": {
+      "main": [
+        [
+          {
+            "node": "Atribuir atendente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
