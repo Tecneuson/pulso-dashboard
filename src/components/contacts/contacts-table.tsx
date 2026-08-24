@@ -5,29 +5,14 @@ import { Search, Download, Phone, Mail } from 'lucide-react'
 import { Input, Select, Button, EtapaBadge } from '@/components/ui'
 import { CardDetail } from '@/components/kanban/card-detail'
 import type { Triagem, TriagemLead } from '@/types'
+import { ASSUNTO_LABELS, MOTIVO_CONTATO, MOTIVO_CONTATO_LABELS, TIPO_CONTATO_LABELS } from '@/types'
 import { comEtapa, etapaFromEstagio, FUNIL_ETAPA_OPTIONS } from '@/lib/funil-etapas'
+import { PLANO_LABELS } from '@/lib/chatwoot/mapping'
+import { CONVENIO_FILTRO } from '@/lib/funil'
 
-const planoLabels: Record<string, string> = {
-  amil: 'Amil',
-  bradesco_saude: 'Bradesco Saúde',
-  omint: 'Omint',
-  prevent_senior: 'Prevent Sênior',
-  sulamerica: 'SulAmérica',
-}
-
-const motivoLabels: Record<string, string> = {
-  transtorno_mental_adulto: 'Transtorno mental adulto',
-  transtorno_mental_infantojuvenil: 'Transtorno infantojuvenil',
-  abuso_de_substancias: 'Abuso de substâncias',
-}
-
-const assuntoLabels: Record<string, string> = {
-  internacao: 'Internação',
-  consulta: 'Consulta',
-  informacao_paciente: 'Informação',
-  administrativo: 'Administrativo',
-  outros: 'Outros',
-}
+const planoLabels: Record<string, string> = PLANO_LABELS
+const motivoLabels: Record<string, string> = MOTIVO_CONTATO_LABELS
+const assuntoLabels: Record<string, string> = ASSUNTO_LABELS
 
 function toCsv(rows: Triagem[]): string {
   const headers = [
@@ -142,7 +127,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
           onChange={(e) => setPlano(e.target.value)}
           options={[
             { value: '', label: 'Todos os convênios' },
-            ...Object.entries(planoLabels).map(([v, l]) => ({ value: v, label: l })),
+            ...CONVENIO_FILTRO.flatMap((c) => c.leadSlugs.map((v) => ({ value: v, label: c.label }))),
           ]}
         />
         <Select
@@ -150,7 +135,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
           onChange={(e) => setMotivo(e.target.value)}
           options={[
             { value: '', label: 'Todos os motivos' },
-            ...Object.entries(motivoLabels).map(([v, l]) => ({ value: v, label: l })),
+            ...MOTIVO_CONTATO.map((v) => ({ value: v, label: motivoLabels[v] })),
           ]}
         />
         <Button variant="secondary" size="md" onClick={handleExport}>
@@ -170,6 +155,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
               <tr className="bg-surface-tertiary text-content-tertiary text-xs uppercase tracking-wide">
                 <th className="text-left font-medium px-4 py-2.5">Nome</th>
                 <th className="text-left font-medium px-4 py-2.5">Contato</th>
+                <th className="text-left font-medium px-4 py-2.5">Categoria</th>
                 <th className="text-left font-medium px-4 py-2.5">Assunto</th>
                 <th className="text-left font-medium px-4 py-2.5">Motivo</th>
                 <th className="text-left font-medium px-4 py-2.5">Convênio</th>
@@ -180,7 +166,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center text-content-tertiary py-8">
+                  <td colSpan={8} className="text-center text-content-tertiary py-8">
                     Nenhum contato encontrado
                   </td>
                 </tr>
@@ -213,10 +199,14 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
                       </div>
                     </td>
                     <td className="px-4 py-3 text-content-secondary">
-                      {t.assunto ? assuntoLabels[t.assunto] : '—'}
+                      {t.tipo_contato ? TIPO_CONTATO_LABELS[t.tipo_contato] ?? t.tipo_contato : '—'}
+                      {t.kids && <span className="ml-1 text-[10px] uppercase text-info-600">Kids</span>}
                     </td>
                     <td className="px-4 py-3 text-content-secondary">
-                      {t.motivo_contato ? motivoLabels[t.motivo_contato] : '—'}
+                      {t.assunto ? assuntoLabels[t.assunto] ?? t.assunto : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-content-secondary">
+                      {t.motivo_contato ? motivoLabels[t.motivo_contato] ?? t.motivo_contato : '—'}
                     </td>
                     <td className="px-4 py-3 text-content-secondary">
                       {t.plano_saude

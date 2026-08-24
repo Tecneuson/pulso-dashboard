@@ -3,11 +3,11 @@
 import { useState } from 'react'
 import { Check, Plus, X } from 'lucide-react'
 import { Select } from '@/components/ui'
-import { useCaptadores } from '@/lib/api-store'
+import { useConsultores } from '@/lib/api-store'
 
 /**
  * Campo controlado de Consultor com cadastro inline. Serve para lead e paciente.
- * (a coluna/tabela no banco continua sendo `captador_id`/`captadores` — só o rótulo mudou.)
+ * Lista ÚNICA `consultores` (coluna `consultor_id`); `captadores`/`captador_id` são legado.
  */
 export function CaptadorField({
   value,
@@ -18,18 +18,18 @@ export function CaptadorField({
   onChange: (id: string | null) => void
   label?: string
 }) {
-  const captadores = useCaptadores()
+  const consultores = useConsultores()
   const [adding, setAdding] = useState(false)
   const [nome, setNome] = useState('')
 
-  const opts = captadores.items
+  const opts = consultores.items
     .filter((c) => c.ativo)
     .map((c) => ({ value: c.id, label: c.nome }))
 
   async function confirmar() {
     const v = nome.trim()
     if (!v) return
-    const c = await captadores.add({ nome: v })
+    const c = await consultores.add({ nome: v })
     if (c) onChange(c.id)
     setNome('')
     setAdding(false)

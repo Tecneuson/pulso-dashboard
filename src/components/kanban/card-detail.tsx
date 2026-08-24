@@ -7,6 +7,7 @@ import {
   XCircle,
   CheckCircle2,
   ChevronDown,
+  ExternalLink,
   IdCard,
   Loader2,
   Phone,
@@ -23,6 +24,10 @@ import type {
 } from '@/types'
 import { MOTIVO_PERDA_LABELS } from '@/types'
 import { formatarCpf } from '@/lib/cpf'
+import { idadeEm, isKids } from '@/lib/idade'
+import { chatwootLinkDoLead } from '@/lib/chatwoot/urls'
+import { useCampos } from '@/lib/api-store'
+import { CamposDinamicos } from './campos-dinamicos'
 import { Modal } from '@/components/ui/modal'
 import { Badge, EtapaBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -53,6 +58,8 @@ interface CardDetailProps {
   onClose: () => void
   /** Abre já no painel de internação (usado quando o card é arrastado p/ Internação). */
   autoInternar?: boolean
+  /** Abre já no painel de perda (card arrastado p/ Perdido — motivo é obrigatório). */
+  autoPerda?: boolean
   onSaved?: (t: TriagemLead) => void
 }
 
@@ -143,7 +150,7 @@ function EventRow({ ev }: { ev: Evento }) {
   )
 }
 
-export function CardDetail({ triagem, open, onClose, autoInternar = false, onSaved }: CardDetailProps) {
+export function CardDetail({ triagem, open, onClose, autoInternar = false, autoPerda = false, onSaved }: CardDetailProps) {
   const [form, setForm] = useState<Record<string, string>>({})
   const [editandoNome, setEditandoNome] = useState(false)
   const [nomeEdit, setNomeEdit] = useState('')
@@ -186,6 +193,8 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
   const [menuAcoes, setMenuAcoes] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const dadosFunil = useFunilDados()
+  const camposDef = useCampos()
+  const [atributos, setAtributos] = useState<Record<string, unknown>>({})
 
   useEffect(() => {
     if (!triagem) return
@@ -201,8 +210,8 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
       para_quem: triagem.para_quem ?? '',
       forma_internacao: triagem.forma_internacao ?? '',
       plano_saude: triagem.plano_saude ?? '',
-      observacoes: triagem.observacoes ?? '',
     })
+    setAtributos({ ...(triagem.atributos ?? {}) })
     setOrigem({
       origem_conversa: triagem.origem_conversa ?? null,
       origem_hospital_id: triagem.origem_hospital_id ?? null,
@@ -217,22 +226,22 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
     // Lead manual: já abre com todos os campos do cadastro à vista, para editar direto.
     setShowMoreFields(!triagem.conversation_id)
     setShowMoreContatos(false)
-    setPainel(autoInternar ? 'internacao' : 'none')
+    setPainel(autoInternar ? 'internacao' : autoPerda ? 'perda' : 'none')
     setNotaTexto('')
     setMotivoPerda('')
     setAcaoErro(null)
     setEditandoNome(false)
     setNomeEdit(triagem.contact_name ?? '')
-    setCaptadorId(triagem.captador_id ?? null)
+    setCaptadorId(triagem.consultor_id ?? triagem.captador_id ?? null)
     setNumeroPaciente(
       triagem.numero_paciente ??
         (triagem.paciente?.identificador_cliente != null
           ? String(triagem.paciente.identificador_cliente)
           : '')
     )
-    // Reinicia só ao abrir outro lead (ou pedir internação), não a cada revalidação.
+    // Reinicia só ao abrir outro lead (ou pedir internação/perda), não a cada revalidação.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triagem?.id, autoInternar])
+  }, [triagem?.id, autoInternar, autoPerda])
 
   // Contatos associados ao mesmo paciente (leitura)
   useEffect(() => {
@@ -317,13 +326,10 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
 
   if (!triagem) return null
 
-  const chatwootBase = process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL
-
-  function chatwootUrl(conversationId: string | null): string | null {
-    return chatwootBase && conversationId
-      ? `${chatwootBase}/app/accounts/1/conversations/${conversationId}`
-      : null
-  }
+  // Link para a conversa (ou, sem conversa, para o contato) no Chatwoot.
+  const linkChatwoot = chatwootLinkDoLead(triagem)
+  const idade = idadeEm(form.data_nascimento || triagem.data_nascimento)
+  const kids = form.data_nascimento ? isKids(form.data_nascimento) : triagem.kids ?? isKids(triagem.data_nascimento)
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -361,6 +367,12 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
       setAcaoErro('Informe o número do paciente para internar.')
       return
     }
+    // Perdido exige motivo (é o que sincroniza com o Chatwoot e libera o encerramento).
+    if (form.etapa === 'perdido' && triagem.etapa !== 'perdido' && !motivoPerda && !triagem.motivo_perda) {
+      setPainel('perda')
+      setAcaoErro('Selecione o motivo da perda para mover para Perdido.')
+      return
+    }
     const payload: Record<string, unknown> = {
       numero_paciente: numeroPaciente.trim() || null,
       phone: form.phone.trim() || null,
@@ -373,8 +385,8 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
       para_quem: form.para_quem || null,
       forma_internacao: form.forma_internacao || null,
       plano_saude: form.plano_saude || null,
-      observacoes: form.observacoes || null,
-      captador_id: captadorId,
+      consultor_id: captadorId,
+      atributos,
       ...origem,
     }
     // Só grava estagio_funil se a etapa realmente mudou (preserva a nuance granular).
@@ -382,6 +394,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
       payload.estagio_funil = ETAPA_TO_ESTAGIO[form.etapa as FunilEtapa]
       // Ao sair de "Perdido", limpa o motivo da perda (senão fica fantasma nos relatórios).
       if (form.etapa !== 'perdido') payload.motivo_perda = null
+      else if (motivoPerda) payload.motivo_perda = motivoPerda
     }
     setSaving(true)
     setStatus('idle')
@@ -392,6 +405,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
     } catch (e) {
       console.error('Falha ao salvar:', e)
       setStatus('error')
+      setAcaoErro(e instanceof Error && e.message !== 'erro' ? e.message : null)
     } finally {
       setSaving(false)
     }
@@ -608,11 +622,25 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
   const eventosAnotacoes: Evento[] = anotacoes.map((a) => ({
     dataISO: a.created_at ?? '',
     data: formatDateTimeBR(a.created_at),
-    agente: a.usuarios?.nome ?? 'Equipe',
+    agente: a.autor_nome ?? a.usuarios?.nome ?? (a.origem === 'chatwoot' ? 'Chatwoot' : 'Equipe'),
     tipo: 'anotacao',
-    desfecho: 'Anotação',
+    desfecho: a.origem === 'chatwoot' ? 'Nota (Chatwoot)' : a.origem === 'bot' ? 'Resumo (Mônica)' : 'Anotação',
     nota: a.conteudo,
   }))
+
+  // Observações gravadas pelo bot na triagem (coluna `observacoes`) viram um evento do histórico.
+  const eventosTriagemBot: Evento[] = triagem.observacoes
+    ? [
+        {
+          dataISO: triagem.created_at,
+          data: formatDateTimeBR(triagem.created_at),
+          agente: 'Mônica (triagem)',
+          tipo: 'anotacao',
+          desfecho: 'Observações da triagem',
+          nota: triagem.observacoes,
+        },
+      ]
+    : []
 
   // Lembretes entram no histórico: quando marcados e quando resolvidos.
   const eventosAgendamentos: Evento[] = agendamentos.flatMap((a) => {
@@ -647,6 +675,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
     ...eventosTriagem,
     ...eventosInternacoes,
     ...eventosAnotacoes,
+    ...eventosTriagemBot,
     ...eventosAgendamentos,
   ].sort((a, b) => b.dataISO.localeCompare(a.dataISO))
   const desfechosRecentes = [...eventosTriagem, ...eventosInternacoes]
@@ -680,6 +709,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
             <p className="text-overline uppercase text-content-tertiary mb-1">Estágio no Funil</p>
             <div className="flex items-center gap-1.5 flex-wrap">
               {form.etapa && <EtapaBadge etapa={form.etapa as FunilEtapa} />}
+              {kids === true && <Badge variant="info">Kids</Badge>}
               {form.etapa === 'perdido' && triagem.motivo_perda && (
                 <Badge variant="danger">
                   Motivo: {MOTIVO_PERDA_LABELS[triagem.motivo_perda] ?? triagem.motivo_perda}
@@ -781,6 +811,18 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
                 </div>
               )}
             </div>
+            {linkChatwoot && (
+              <a
+                href={linkChatwoot.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={headerBtn}
+                title={linkChatwoot.tipo === 'conversa' ? 'Abrir a conversa no Chatwoot' : 'Abrir o contato no Chatwoot (sem conversa)'}
+              >
+                <ExternalLink size={14} />
+                {linkChatwoot.tipo === 'conversa' ? 'Abrir no Chatwoot' : 'Contato no Chatwoot'}
+              </a>
+            )}
             <button type="button" className={headerBtn} onClick={() => setPainel(painel === 'internacao' ? 'none' : 'internacao')}>
               <CheckCircle2 size={14} />
               Marcar Internação
@@ -1004,6 +1046,11 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
                 onChange={(e) => set('data_nascimento', e.target.value)}
                 className={inputCls}
               />
+              {idade != null && (
+                <p className="text-xs text-content-tertiary mt-1">
+                  {idade} anos{kids ? ' · Kids (8–17) — marcado automaticamente no CRM e no Chatwoot' : ''}
+                </p>
+              )}
             </Field>
 
             <Field label="Etapa do funil">
@@ -1012,7 +1059,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
             <Field label="Elegível">
               <Select options={withEmpty(ELEGIVEL_OPTIONS)} value={form.elegivel} onChange={(e) => set('elegivel', e.target.value)} />
             </Field>
-            <Field label="Tipo de contato">
+            <Field label="Categoria do contato">
               <Select options={withEmpty(FIELD_OPTIONS.tipo_contato)} value={form.tipo_contato} onChange={(e) => set('tipo_contato', e.target.value)} />
             </Field>
             <Field label="Assunto">
@@ -1027,6 +1074,16 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
               <CaptadorField value={captadorId} onChange={(id) => { setCaptadorId(id); setStatus('idle') }} />
             </div>
 
+            {camposDef.ativos.length > 0 && (
+              <div className="pt-3 border-t border-border">
+                <CamposDinamicos
+                  campos={camposDef.ativos}
+                  valores={atributos}
+                  onChange={(chave, valor) => { setAtributos((a) => ({ ...a, [chave]: valor })); setStatus('idle') }}
+                />
+              </div>
+            )}
+
             {showMoreFields && (
               <>
                 <Field label="Para quem">
@@ -1038,9 +1095,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, onSav
                 <Field label="Plano de saúde">
                   <Select options={withEmpty(FIELD_OPTIONS.plano_saude)} value={form.plano_saude} onChange={(e) => set('plano_saude', e.target.value)} />
                 </Field>
-                <Field label="Observações">
-                  <textarea value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} rows={3} className={inputCls} placeholder="Notas internas sobre o atendimento…" />
-                </Field>
+                {/* "Observações" saiu do card: use Ações → Adicionar Nota (histórico ⇄ notas do Chatwoot). */}
               </>
             )}
 

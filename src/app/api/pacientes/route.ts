@@ -85,14 +85,30 @@ export async function PATCH(request: NextRequest) {
     }
     patch.estagio_reativacao = body.estagio_reativacao
   }
-  // Vínculo de captador (uuid ou null).
-  if ('captador_id' in body) patch.captador_id = body.captador_id ?? null
+  // Vínculo de consultor (uuid ou null). `captador_id` continua aceito por compatibilidade.
+  const uuidOuNull = (v: unknown) => (v == null || v === '' ? null : /^[0-9a-f-]{36}$/i.test(String(v)) ? String(v) : undefined)
+  if ('consultor_id' in body) {
+    const v = uuidOuNull(body.consultor_id)
+    if (v === undefined) return NextResponse.json({ error: 'consultor_id inválido' }, { status: 400 })
+    patch.consultor_id = v
+  }
+  if ('captador_id' in body) {
+    const v = uuidOuNull(body.captador_id)
+    if (v === undefined) return NextResponse.json({ error: 'captador_id inválido' }, { status: 400 })
+    patch.captador_id = v
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'nada a atualizar' }, { status: 400 })
   }
 
-  const { error } = await supabase.from('pacientes').update(patch).eq('id', id)
+  let { error } = await supabase.from('pacientes').update(patch).eq('id', id)
+  // Migration 20260823 pendente (sem consultor_id): grava o vínculo no campo legado.
+  if (error && /consultor_id/.test(error.message) && 'consultor_id' in patch) {
+    const { consultor_id: _c, ...resto } = patch
+    void _c
+    ;({ error } = await supabase.from('pacientes').update(resto).eq('id', id))
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })

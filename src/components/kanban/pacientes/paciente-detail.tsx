@@ -73,9 +73,9 @@ export function PacienteDetail({ paciente, open, onClose }: PacienteDetailProps)
   const [savedCaptador, setSavedCaptador] = useState(false)
 
   useEffect(() => {
-    setCaptadorId(paciente?.captador_id ?? null)
+    setCaptadorId(paciente?.consultor_id ?? paciente?.captador_id ?? null)
     setSavedCaptador(false)
-  }, [paciente?.id, paciente?.captador_id])
+  }, [paciente?.id, paciente?.consultor_id, paciente?.captador_id])
 
   if (!paciente) return null
 
@@ -88,7 +88,7 @@ export function PacienteDetail({ paciente, open, onClose }: PacienteDetailProps)
       const res = await fetch('/api/pacientes', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: pacienteId, captador_id: id }),
+        body: JSON.stringify({ id: pacienteId, consultor_id: id }),
       })
       if (res.ok) setSavedCaptador(true)
     } catch {

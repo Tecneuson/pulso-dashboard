@@ -1,11 +1,15 @@
 'use client'
 
 import { useDraggable } from '@dnd-kit/core'
-import { MOTIVO_PERDA_LABELS } from '@/types'
+import { ExternalLink } from 'lucide-react'
+import { MOTIVO_PERDA_LABELS, TIPO_CONTATO_LABELS } from '@/types'
 import { formatarCpf } from '@/lib/cpf'
 import { classificacaoMeta } from '@/lib/funil'
 import { situacaoAgendamento } from '@/lib/agendamentos'
 import { FUNIL_ETAPA_VAR, type LeadComEtapa } from '@/lib/funil-etapas'
+import { PLANO_LABELS } from '@/lib/chatwoot/mapping'
+import { chatwootLinkDoLead } from '@/lib/chatwoot/urls'
+import { isKids } from '@/lib/idade'
 import { CardBase, type CardBadge } from './card-base'
 import { useFunilDados } from './funil-dados'
 
@@ -15,25 +19,10 @@ interface KanbanCardProps {
   isDragOverlay?: boolean
 }
 
-const tipoContatoLabels: Record<string, string> = {
-  lead: 'Lead',
-  ex_paciente: 'Paciente',
-  responsavel: 'Responsável',
-  responsavel_lead: 'Resp. lead',
-  responsavel_ex_paciente: 'Resp. paciente',
-  parceiro: 'Parceiro',
-}
-
-const planoLabels: Record<string, string> = {
-  amil: 'Amil',
-  bradesco_saude: 'Bradesco Saúde',
-  omint: 'Omint',
-  prevent_senior: 'Prevent Sênior',
-  sulamerica: 'SulAmérica',
-}
+const tipoContatoLabels: Record<string, string> = TIPO_CONTATO_LABELS
 
 function convenioDoLead(t: LeadComEtapa): string {
-  if (t.plano_saude) return planoLabels[t.plano_saude] ?? t.plano_saude
+  if (t.plano_saude) return PLANO_LABELS[t.plano_saude] ?? t.plano_saude
   if (t.paciente?.convenio_raw) return t.paciente.convenio_raw
   if (t.forma_internacao === 'particular') return 'Particular'
   return 'Sem convênio'
@@ -60,6 +49,13 @@ export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps)
         : 'Lead',
     },
   ]
+  // Kids: derivado da data de nascimento (8–17 anos) — vale mesmo antes da migration.
+  if (triagem.kids === true || (triagem.kids == null && isKids(triagem.data_nascimento) === true)) {
+    badges.push({
+      label: 'Kids',
+      className: 'bg-info-500/12 text-info-700 dark:text-info-500 border border-info-500/25',
+    })
+  }
   if (classif) badges.push({ label: classif.label, className: classif.badgeClass })
   if (!triagem.conversation_id) {
     badges.push({
@@ -99,6 +95,7 @@ export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps)
   const cpf = triagem.cpf ?? triagem.paciente?.cpf ?? null
 
   const accent = isUrgent ? 'var(--stage-recusou)' : FUNIL_ETAPA_VAR[triagem.etapa]
+  const linkChatwoot = chatwootLinkDoLead(triagem)
 
   return (
     <CardBase
@@ -123,11 +120,27 @@ export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps)
         situacao: situacaoAgendamento(agendamento),
       }}
       extra={
-        triagem.etapa === 'perdido' && triagem.motivo_perda ? (
-          <p className="mt-2 text-[11px] text-danger-600 dark:text-danger-500 truncate">
-            Perda: {MOTIVO_PERDA_LABELS[triagem.motivo_perda] ?? triagem.motivo_perda}
-          </p>
-        ) : undefined
+        <>
+          {triagem.etapa === 'perdido' && triagem.motivo_perda && (
+            <p className="mt-2 text-[11px] text-danger-600 dark:text-danger-500 truncate">
+              Perda: {MOTIVO_PERDA_LABELS[triagem.motivo_perda] ?? triagem.motivo_perda}
+            </p>
+          )}
+          {linkChatwoot && !isDragOverlay && (
+            <a
+              href={linkChatwoot.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="mt-2 inline-flex items-center gap-1 text-[11px] text-brand-500 hover:text-brand-400"
+              title={linkChatwoot.tipo === 'conversa' ? 'Abrir a conversa no Chatwoot' : 'Abrir o contato no Chatwoot'}
+            >
+              <ExternalLink size={11} />
+              {linkChatwoot.tipo === 'conversa' ? 'Conversa no Chatwoot' : 'Contato no Chatwoot'}
+            </a>
+          )}
+        </>
       }
     />
   )

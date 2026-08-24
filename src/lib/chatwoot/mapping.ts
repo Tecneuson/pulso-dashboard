@@ -1,15 +1,25 @@
-import type { Triagem } from '@/types'
-import { ESTAGIO_FUNIL } from '@/types'
+import type { CampoPersonalizado, Triagem } from '@/types'
+import {
+  ESTAGIO_FUNIL,
+  MOTIVO_PERDA,
+  MOTIVO_PERDA_LABELS,
+  MOTIVO_PERDA_LEGADO,
+  TIPO_CONTATO,
+  TIPO_CONTATO_LABELS,
+  TIPO_CONTATO_LEGADO,
+} from '@/types'
 import {
   ETAPA_TO_ESTAGIO,
   FUNIL_ETAPAS,
   FUNIL_ETAPA_LABELS,
   etapaFromEstagio,
 } from '@/lib/funil-etapas'
+import { KEYS, MOTIVOS_PERDA_CHATWOOT, PLANOS_CHATWOOT } from './attributes'
 
 /**
  * Tradução de valores entre o triagem_hsm (slugs) e os custom attributes do Chatwoot (rótulos).
- * Vocabulário canônico = Chatwoot (decisão do cliente). Valores conferidos ao vivo na API.
+ * Vocabulário canônico = Chatwoot (decisão do cliente). Os rótulos aqui são EXATAMENTE os
+ * das definições em `attributes.ts` (que o CRM garante no Chatwoot).
  */
 
 type Level = 'contact' | 'conversation'
@@ -21,6 +31,8 @@ interface FieldMap {
   slugToLabel: Record<string, string>
   /** Volta explícita (Chatwoot → banco) quando vários slugs compartilham o mesmo rótulo. */
   labelToSlug?: Record<string, string>
+  /** Chatwoot com valor vazio ('') limpa o campo no banco (null). Padrão: ignora vazio. */
+  vazioLimpa?: boolean
 }
 
 /**
@@ -43,49 +55,57 @@ const estagioLabelToSlug: Record<string, string> = Object.fromEntries(
 /** Rótulo da etapa "Contato" — no banco equivale a estagio_funil = null. */
 export const ETAPA_CONTATO_LABEL = FUNIL_ETAPA_LABELS.contato
 
-const planoMap: Record<string, string> = {
-  alice: 'Alice',
-  allianz_saude: 'Allianz Saúde',
-  amafresp: 'Amafresp',
-  amil: 'Amil',
-  banco_central_do_brasil_saude: 'Banco Central do Brasil Saúde',
-  blue: 'Blue',
-  bradesco_saude: 'Bradesco Saúde',
-  care_plus: 'Care Plus',
-  central_nacional_unimed_cnu: 'Central Nacional Unimed - CNU',
-  economus: 'Economus',
-  fundacao_saude_itau: 'Fundação Saúde Itaú',
-  gama_saude: 'Gama Saúde',
-  life_empresarial_saude: 'Life Empresarial Saúde',
-  mediservice: 'MediService',
-  medsenior: 'MedSenior',
-  medtour: 'MedTour',
-  metrus: 'Metrus',
-  notredame_intermedica: 'Notredame Intermédica',
-  omint_saude: 'Omint Saúde',
-  porto_saude: 'Porto Saúde',
-  postal_saude: 'Postal Saúde',
-  prevent_senior: 'Prevent Senior',
-  proasa_adventista_de_saude: 'PROASA Adventista de Saúde',
-  sami_saude: 'Sami Saúde',
-  santa_casa_saude: 'Santa Casa Saúde',
-  saude_caixa: 'Saúde Caixa',
-  sbc_saude: 'SBC Saúde',
-  sepaco: 'Sepaco',
-  sulamerica: 'SulAmérica',
-  total_medcare: 'Total MedCare',
-  trasmontano: 'Trasmontano',
-  vivest: 'Vivest',
-  particular: 'Particular',
-  nao_possui: 'Não possui',
-}
+const PLANO_SLUGS = [
+  'alice',
+  'allianz_saude',
+  'amafresp',
+  'amil',
+  'banco_central_do_brasil_saude',
+  'blue',
+  'bradesco_saude',
+  'care_plus',
+  'central_nacional_unimed_cnu',
+  'economus',
+  'fundacao_saude_itau',
+  'gama_saude',
+  'life_empresarial_saude',
+  'mediservice',
+  'medsenior',
+  'medtour',
+  'metrus',
+  'notredame_intermedica',
+  'omint_saude',
+  'porto_saude',
+  'postal_saude',
+  'prevent_senior',
+  'proasa_adventista_de_saude',
+  'sami_saude',
+  'santa_casa_saude',
+  'saude_caixa',
+  'sbc_saude',
+  'sepaco',
+  'sulamerica',
+  'total_medcare',
+  'trasmontano',
+  'vivest',
+  'particular',
+  'nao_possui',
+]
+const planoMap: Record<string, string> = Object.fromEntries(
+  PLANO_SLUGS.map((slug, i) => [slug, PLANOS_CHATWOOT[i]])
+)
+/** Rótulo do plano por slug — único lugar (antes havia 4 cópias parciais na UI). */
+export const PLANO_LABELS: Record<string, string> = { ...planoMap, omint: 'Omint Saúde' }
 
-const tipoContatoMap: Record<string, string> = {
-  lead: 'Lead',
-  ex_paciente: 'Ex-paciente',
-  responsavel: 'Responsável',
-  medico: 'Médico',
-  parceiro: 'Parceiro',
+// Perfil do contato (Lead / Ex-paciente / Responsável / Médico / Consultor). Rótulos antigos
+// no Chatwoot ("Parceiro", "Paciente") continuam sendo lidos.
+const tipoContatoMap: Record<string, string> = Object.fromEntries(
+  TIPO_CONTATO.map((slug) => [slug, TIPO_CONTATO_LABELS[slug]])
+)
+const tipoContatoLabelToSlug: Record<string, string> = {
+  ...Object.fromEntries(TIPO_CONTATO.map((slug) => [TIPO_CONTATO_LABELS[slug], slug])),
+  Parceiro: 'consultor',
+  Paciente: 'lead',
 }
 
 const paraQuemMap: Record<string, string> = {
@@ -94,9 +114,8 @@ const paraQuemMap: Record<string, string> = {
   amigo: 'Amigo(a)',
 }
 
-// Campo `motivo_contato_crm` (contato, list TM/TUS) — só o dashboard escreve nele, o n8n
-// não toca. A distinção adulto/infantojuvenil deixou de ser um valor de motivo e passou a
-// vir da `data_de_nascimento`. Chave separada do `motivo_do_contato` do n8n.
+// Campo `motivo_contato_crm` (contato, list TM/TUS). A distinção adulto/infantojuvenil
+// deixou de ser um valor de motivo e passou a vir da `data_de_nascimento` (+ `kids`).
 const motivoContatoMap: Record<string, string> = {
   transtorno_mental: 'TM',
   abuso_de_substancias: 'TUS',
@@ -111,45 +130,94 @@ const assuntoMap: Record<string, string> = {
   outro_assunto: 'Outro(s)',
 }
 
-const motivoPerdaMap: Record<string, string> = {
-  parou_de_interagir: 'Parou de interagir',
-  desistiu_do_tratamento: 'Desistiu do tratamento',
-  financeiro: 'Financeiro',
-  plano_de_saude_nao_autorizou: 'Plano de saúde não autorizou',
-  plano_de_saude_sem_convenio: 'Plano de saúde sem cobertura',
-  nao_tem_plano_de_saude: 'Não tem plano de saúde',
-  nao_gostou_do_hospital: 'Não gostou do hospital',
-  sus: 'SUS',
-  outro: 'Outro(s)',
+const motivoPerdaMap: Record<string, string> = Object.fromEntries(
+  MOTIVO_PERDA.map((slug) => [slug, MOTIVO_PERDA_LABELS[slug]])
+)
+// Rótulos antigos do Chatwoot → slug atual (conversas antigas continuam legíveis).
+const motivoPerdaLabelToSlug: Record<string, string> = {
+  ...Object.fromEntries(MOTIVO_PERDA.map((slug) => [MOTIVO_PERDA_LABELS[slug], slug])),
+  'Parou de interagir': 'falta_de_interacao',
+  'Desistiu do tratamento': 'familia_desistiu_da_internacao',
+  Financeiro: 'sem_condicoes_financeiras',
+  'Plano de saúde não autorizou': 'plano_de_saude_nao_autorizou',
+  'Plano de saúde sem cobertura': 'plano_de_saude_nao_atendido_pelo_hsm',
+  'Não gostou do hospital': 'nao_gostou_do_hospital',
+  'Não tem plano de saúde': 'nao_tem_plano_de_saude',
+  SUS: 'sus',
+  'Outro(s)': 'outro',
+  // lista intermediária que existia no Chatwoot em ago/2026
+  Carência: 'plano_em_carencia',
+  'Alta na origem': 'alta_origem',
+  'Cancelado pela origem': 'cancelado_pela_origem',
+  'Colaborador do hospital': 'colaborador_do_hospital',
+  'Convênio por direcionamento': 'convenio_por_direcionamento',
+  'Convênio sem contrato para adulto/kids': 'convenio_sem_contrato_para_adulto',
+  'Convênio suspenso': 'convenio_suspenso',
+  'Família desistiu da internação': 'familia_desistiu_da_internacao',
+  'Rejeitou vaga localização': 'familia_rejeitou_vaga',
+  'Evadiu na origem': 'paciente_evadiu_na_origem',
+  'Sem leito disponível': 'sem_leito_disponivel',
+  'Transferido para outro serviço': 'transferido_para_outro_servico',
+}
+
+/** Chave de comparação tolerante: sem acento, minúscula, espaços colapsados. */
+function chaveRotulo(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Procura o slug pelo rótulo: exato primeiro, depois tolerante a acento/caixa. */
+function slugPorRotulo(mapa: Record<string, string>, rotulo: string): string | undefined {
+  if (mapa[rotulo] !== undefined) return mapa[rotulo]
+  const alvo = chaveRotulo(rotulo)
+  for (const [k, v] of Object.entries(mapa)) if (chaveRotulo(k) === alvo) return v
+  return undefined
 }
 
 export const FIELD_MAPS: FieldMap[] = [
   {
     triagemField: 'estagio_funil',
     level: 'contact',
-    chatwootKey: 'estagio_no_funil',
+    chatwootKey: KEYS.estagio,
     slugToLabel: estagioMap,
     labelToSlug: estagioLabelToSlug,
   },
-  { triagemField: 'plano_saude', level: 'contact', chatwootKey: 'plano_de_saude', slugToLabel: planoMap },
-  { triagemField: 'tipo_contato', level: 'contact', chatwootKey: 'quem_e_o_contato', slugToLabel: tipoContatoMap },
-  { triagemField: 'para_quem', level: 'contact', chatwootKey: 'para_quem_e_a_solicitacao', slugToLabel: paraQuemMap },
-  { triagemField: 'motivo_contato', level: 'contact', chatwootKey: 'motivo_contato_crm', slugToLabel: motivoContatoMap },
-  { triagemField: 'assunto', level: 'conversation', chatwootKey: 'assunto_da_conversa', slugToLabel: assuntoMap },
-  { triagemField: 'motivo_perda', level: 'conversation', chatwootKey: 'motivo_de_perda', slugToLabel: motivoPerdaMap },
+  { triagemField: 'plano_saude', level: 'contact', chatwootKey: KEYS.plano, slugToLabel: planoMap },
+  {
+    triagemField: 'tipo_contato',
+    level: 'contact',
+    chatwootKey: KEYS.tipoContato,
+    slugToLabel: tipoContatoMap,
+    labelToSlug: tipoContatoLabelToSlug,
+  },
+  { triagemField: 'para_quem', level: 'contact', chatwootKey: KEYS.paraQuem, slugToLabel: paraQuemMap },
+  { triagemField: 'motivo_contato', level: 'contact', chatwootKey: KEYS.motivoContato, slugToLabel: motivoContatoMap },
+  { triagemField: 'assunto', level: 'conversation', chatwootKey: KEYS.assunto, slugToLabel: assuntoMap },
+  {
+    triagemField: 'motivo_perda',
+    level: 'conversation',
+    chatwootKey: KEYS.motivoPerda,
+    slugToLabel: motivoPerdaMap,
+    labelToSlug: motivoPerdaLabelToSlug,
+    vazioLimpa: true,
+  },
 ]
 
-/** Custom attribute (novo) usado pra espelhar as observações do dashboard. */
-export const OBSERVACOES_KEY = 'observacoes'
 /** Custom attribute (conversa) derivado: paciente foi internado? */
-export const VENDA_KEY = 'venda'
+export const VENDA_KEY = KEYS.venda
 /** Custom attribute (contato, date) — data de nascimento do paciente. */
-export const DATA_NASCIMENTO_KEY = 'data_de_nascimento'
+export const DATA_NASCIMENTO_KEY = KEYS.dataNascimento
+/** Custom attribute (contato, checkbox) — derivado da data de nascimento (8–17 anos). */
+export const KIDS_KEY = KEYS.kids
 /** Custom attribute (conversa, list Sim/Não) — elegibilidade avaliada na conversa. */
-export const ELEGIVEL_KEY = 'elegivel'
+export const ELEGIVEL_KEY = KEYS.elegivel
 /** Custom attributes (conversa) — origem da conversa, associada ao paciente. */
-export const HOSPITAL_ORIGEM_KEY = 'hospital_origem'
-export const CONSULTOR_ORIGEM_KEY = 'consultor_origem'
+export const HOSPITAL_ORIGEM_KEY = KEYS.hospitalOrigem
+export const CONSULTOR_ORIGEM_KEY = KEYS.consultorOrigem
 
 function reverse(m: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(m).map(([k, v]) => [v, k]))
@@ -164,33 +232,46 @@ export const FIELD_OPTIONS: Partial<Record<keyof Triagem, { value: string; label
     ])
   )
 
-/** Dashboard → Chatwoot: atributos do CONTATO a partir de uma triagem (slug→rótulo; ignora nulos). */
-export function contactAttrsFromTriagem(t: Partial<Triagem>): Record<string, string> {
-  const out: Record<string, string> = {}
+function simNao(v: boolean | null | undefined): string {
+  return v === true ? 'Sim' : v === false ? 'Não' : ''
+}
+
+/**
+ * Dashboard → Chatwoot: atributos do CONTATO a partir de uma triagem (slug→rótulo).
+ * Chave presente com valor null/'' → manda '' (limpa no Chatwoot). Chave ausente → não toca.
+ */
+export function contactAttrsFromTriagem(t: Partial<Triagem>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
   for (const f of FIELD_MAPS) {
     if (f.level !== 'contact') continue
+    if (!(f.triagemField in t)) continue
     const v = t[f.triagemField] as string | null | undefined
     if (v && f.slugToLabel[v]) out[f.chatwootKey] = f.slugToLabel[v]
+    else if (v == null || v === '') out[f.chatwootKey] = ''
   }
-  if (typeof t.data_nascimento === 'string' && t.data_nascimento) {
-    out[DATA_NASCIMENTO_KEY] = t.data_nascimento
+  if ('estagio_funil' in t && t.estagio_funil === null) out[KEYS.estagio] = ETAPA_CONTATO_LABEL
+  if ('data_nascimento' in t) {
+    out[DATA_NASCIMENTO_KEY] =
+      typeof t.data_nascimento === 'string' && t.data_nascimento ? t.data_nascimento.slice(0, 10) : ''
   }
+  if ('kids' in t) out[KIDS_KEY] = t.kids === true
   return out
 }
 
-/** Dashboard → Chatwoot: atributos da CONVERSA (inclui `venda` derivado e `observacoes`). */
-export function conversationAttrsFromTriagem(t: Partial<Triagem>): Record<string, string> {
-  const out: Record<string, string> = {}
+/** Dashboard → Chatwoot: atributos da CONVERSA (inclui `venda` derivado e `elegivel`). */
+export function conversationAttrsFromTriagem(t: Partial<Triagem>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
   for (const f of FIELD_MAPS) {
     if (f.level !== 'conversation') continue
+    if (!(f.triagemField in t)) continue
     const v = t[f.triagemField] as string | null | undefined
     if (v && f.slugToLabel[v]) out[f.chatwootKey] = f.slugToLabel[v]
+    else if (v == null || v === '') out[f.chatwootKey] = ''
   }
-  if (t.estagio_funil !== undefined && t.estagio_funil !== null) {
+  if ('estagio_funil' in t) {
     out[VENDA_KEY] = t.estagio_funil === 'internado' ? 'Sim' : 'Não'
   }
-  if (typeof t.elegivel === 'boolean') out[ELEGIVEL_KEY] = t.elegivel ? 'Sim' : 'Não'
-  // observacoes NÃO é mais atributo: vira nota privada na conversa (ver /api/triagem).
+  if ('elegivel' in t) out[ELEGIVEL_KEY] = simNao(t.elegivel)
   return out
 }
 
@@ -202,20 +283,125 @@ export function triagemFromChatwoot(
   const out: Partial<Triagem> = {}
   for (const f of FIELD_MAPS) {
     const src = f.level === 'contact' ? contactAttrs : convAttrs
+    if (!(f.chatwootKey in src)) continue
     const label = src[f.chatwootKey]
     if (label != null && label !== '') {
-      const slug = (f.labelToSlug ?? reverse(f.slugToLabel))[String(label)]
+      const slug = slugPorRotulo(f.labelToSlug ?? reverse(f.slugToLabel), String(label))
       if (slug) (out as Record<string, unknown>)[f.triagemField] = slug
+    } else if (f.vazioLimpa) {
+      ;(out as Record<string, unknown>)[f.triagemField] = null
     }
   }
   // Etapa "Contato" no Chatwoot = sem estágio no banco (o atendente pode voltar o card pra lá).
-  if (contactAttrs['estagio_no_funil'] === ETAPA_CONTATO_LABEL) out.estagio_funil = null
-  const obs = convAttrs[OBSERVACOES_KEY]
-  if (typeof obs === 'string') out.observacoes = obs
+  if (contactAttrs[KEYS.estagio] === ETAPA_CONTATO_LABEL) out.estagio_funil = null
   const dn = contactAttrs[DATA_NASCIMENTO_KEY]
-  if (typeof dn === 'string' && dn) out.data_nascimento = dn.slice(0, 10)
+  if (typeof dn === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dn)) out.data_nascimento = dn.slice(0, 10)
+  else if (dn === '' || dn === null) out.data_nascimento = null
   const el = convAttrs[ELEGIVEL_KEY]
   if (el === 'Sim') out.elegivel = true
   else if (el === 'Não') out.elegivel = false
+  else if (el === '') out.elegivel = null
   return out
+}
+
+/**
+ * Chatwoot → Dashboard: desfecho marcado na conversa. `venda = Sim` → Internação;
+ * `motivo_de_perda` preenchido → Perdido (com o motivo). Devolve só o que precisa mudar
+ * dado o estágio atual do lead — quem chama já comparou os demais campos.
+ */
+export function desfechoFromChatwoot(
+  convAttrs: Record<string, unknown>,
+  atual: { estagio_funil: string | null; motivo_perda: string | null }
+): Partial<Triagem> {
+  const out: Partial<Triagem> = {}
+  const etapaAtual = etapaFromEstagio(atual.estagio_funil as Triagem['estagio_funil'])
+  const venda = convAttrs[VENDA_KEY]
+  const motivoLabel = convAttrs[KEYS.motivoPerda]
+  const motivoSlug =
+    motivoLabel != null && motivoLabel !== '' ? slugPorRotulo(motivoPerdaLabelToSlug, String(motivoLabel)) ?? null : null
+
+  if (venda === 'Sim' && etapaAtual !== 'internacao') {
+    out.estagio_funil = 'internado'
+    out.motivo_perda = null
+    return out
+  }
+  if (motivoSlug) {
+    if (etapaAtual !== 'perdido') out.estagio_funil = ETAPA_TO_ESTAGIO.perdido
+    if (atual.motivo_perda !== motivoSlug) out.motivo_perda = motivoSlug as Triagem['motivo_perda']
+    return out
+  }
+  return out
+}
+
+// ============================================================
+// Campos personalizados (dinâmicos) — valores em triagem_hsm.atributos
+// ============================================================
+
+/** Coerção do valor digitado/recebido para o tipo do campo. */
+export function coerceCampoValor(campo: Pick<CampoPersonalizado, 'tipo' | 'opcoes'>, v: unknown): unknown {
+  if (v === undefined) return undefined
+  if (v === null || v === '') return null
+  switch (campo.tipo) {
+    case 'checkbox':
+      if (typeof v === 'boolean') return v
+      return ['true', '1', 'sim', 'yes'].includes(String(v).toLowerCase())
+    case 'number': {
+      const n = typeof v === 'number' ? v : Number(String(v).replace(',', '.'))
+      return Number.isFinite(n) ? n : null
+    }
+    case 'date': {
+      const s = String(v)
+      return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null
+    }
+    case 'list': {
+      const s = String(v)
+      return campo.opcoes.length === 0 || campo.opcoes.includes(s) ? s : null
+    }
+    default:
+      return String(v)
+  }
+}
+
+/** Chatwoot → Dashboard: só as chaves dos campos dinâmicos presentes no payload. */
+export function atributosFromChatwoot(
+  campos: CampoPersonalizado[],
+  contactAttrs: Record<string, unknown> = {},
+  convAttrs: Record<string, unknown> = {}
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const c of campos) {
+    const src = c.modelo === 'contact' ? contactAttrs : convAttrs
+    if (!(c.chave in src)) continue
+    out[c.chave] = coerceCampoValor(c, src[c.chave])
+  }
+  return out
+}
+
+/** Dashboard → Chatwoot: separa os valores dinâmicos por modelo (contato/conversa). */
+export function chatwootAttrsFromAtributos(
+  campos: CampoPersonalizado[],
+  atributos: Record<string, unknown> | null | undefined
+): { contact: Record<string, unknown>; conversation: Record<string, unknown> } {
+  const out = { contact: {} as Record<string, unknown>, conversation: {} as Record<string, unknown> }
+  if (!atributos) return out
+  for (const c of campos) {
+    if (!(c.chave in atributos)) continue
+    const v = coerceCampoValor(c, atributos[c.chave])
+    const alvo = c.modelo === 'contact' ? out.contact : out.conversation
+    if (c.tipo === 'checkbox') alvo[c.chave] = v === true
+    else alvo[c.chave] = v ?? ''
+  }
+  return out
+}
+
+/** Slug de tipo de contato aceito pelo banco (normaliza valores antigos). */
+export function tipoContatoSlug(v: unknown): string | null {
+  if (typeof v !== 'string' || !v) return null
+  return TIPO_CONTATO_LEGADO[v] ?? null
+}
+
+/** Slug de motivo de perda atual (traduz os slugs antigos). */
+export function motivoPerdaSlug(v: unknown): string | null {
+  if (typeof v !== 'string' || !v) return null
+  return MOTIVO_PERDA_LEGADO[v] ?? v
 }

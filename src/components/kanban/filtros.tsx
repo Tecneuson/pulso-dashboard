@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { FUNIL_ETAPA_VAR, type LeadComEtapa } from '@/lib/funil-etapas'
-import { useCaptadores, useConsultores, useHospitais, useUsuarios } from '@/lib/api-store'
+import { useConsultores, useHospitais, useUsuarios } from '@/lib/api-store'
 import { AGENDADOS_FILTRO_OPTS } from '@/lib/agendamentos'
 import {
   FILTROS_INICIAL,
@@ -34,8 +34,9 @@ const DIM_LABEL: Record<string, string> = {
   assuntos: 'Assunto',
   tipos: 'Tipo',
   origens: 'Origem',
-  // `captadores` é a dimensão do vínculo direto do lead (coluna captador_id) —
-  // rotulada só como "Consultor"; `consultores` é o consultor da origem da conversa.
+  // `captadores` é a dimensão do vínculo direto do lead (coluna consultor_id; nome da
+  // dimensão mantido por compatibilidade) — rotulada "Consultor"; `consultores` é o
+  // consultor da origem da conversa. Os dois usam a lista unificada `consultores`.
   captadores: 'Consultor',
   consultores: 'Consultor (origem)',
   hospitais: 'Hospital',
@@ -284,7 +285,6 @@ export function Filtros({ leads, filtrados, filtros, onChange }: FiltrosProps) {
 
   const consultores = useConsultores()
   const hospitais = useHospitais()
-  const captadores = useCaptadores()
   const usuarios = useUsuarios()
 
   const total = leads.length
@@ -293,7 +293,8 @@ export function Filtros({ leads, filtrados, filtros, onChange }: FiltrosProps) {
 
   const consultorOpts: Opt[] = consultores.items.filter((c) => c.ativo).map((c) => ({ value: c.id, label: c.nome }))
   const hospitalOpts: Opt[] = hospitais.items.filter((h) => h.ativo).map((h) => ({ value: h.id, label: h.nome }))
-  const captadorOpts: Opt[] = captadores.items.filter((c) => c.ativo).map((c) => ({ value: c.id, label: c.nome }))
+  // Lista unificada: o "Consultor" do lead e o "Consultor (origem)" usam o mesmo cadastro.
+  const captadorOpts: Opt[] = consultorOpts
   const agenteOpts: Opt[] = usuarios.items.map((u) => ({ value: u.id, label: u.nome }))
 
   function optionLabel(dim: keyof FiltrosState, value: string): string {
@@ -343,6 +344,12 @@ export function Filtros({ leads, filtrados, filtros, onChange }: FiltrosProps) {
       key: 'fonte',
       label: filtros.fonte === 'manual' ? 'Lead manual' : 'Lead do banco',
       onClear: () => onChange({ ...filtros, fonte: '' }),
+    })
+  if (filtros.kids)
+    chips.push({
+      key: 'kids',
+      label: filtros.kids === 'sim' ? 'Kids (8–17)' : 'Adulto',
+      onClear: () => onChange({ ...filtros, kids: '' }),
     })
 
   function limparTudo() {
@@ -544,6 +551,18 @@ export function Filtros({ leads, filtrados, filtros, onChange }: FiltrosProps) {
               </Secao>
 
               <Secao titulo="Perfil do lead">
+                <div>
+                  <p className="text-sm text-content-secondary mb-1.5">Faixa etária</p>
+                  <Segmented
+                    value={filtros.kids}
+                    onChange={(v) => onChange({ ...filtros, kids: v as FiltrosState['kids'] })}
+                    options={[
+                      { value: '', label: 'Todos' },
+                      { value: 'sim', label: 'Kids (8–17)' },
+                      { value: 'nao', label: 'Adulto' },
+                    ]}
+                  />
+                </div>
                 <ChipGroup label="Motivo do contato" dim="motivos" options={OPCOES.motivos} filtros={filtros} leads={leads} onChange={onChange} />
                 <ChipGroup label="Assunto" dim="assuntos" options={OPCOES.assuntos} filtros={filtros} leads={leads} onChange={onChange} />
                 <ChipGroup label="Tipo de contato" dim="tipos" options={OPCOES.tipos} filtros={filtros} leads={leads} onChange={onChange} />

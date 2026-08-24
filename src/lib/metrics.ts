@@ -1,5 +1,7 @@
 import type { Triagem } from '@/types'
+import { ASSUNTO_LABELS, MOTIVO_CONTATO_LABELS } from '@/types'
 import { etapaFromEstagio } from './funil-etapas'
+import { PLANO_LABELS } from './chatwoot/mapping'
 
 export interface KpiData {
   totalMonth: number
@@ -61,11 +63,7 @@ export function dailyVolume(triagens: Triagem[], days = 30) {
   return Object.values(buckets)
 }
 
-const motivoLabels: Record<string, string> = {
-  transtorno_mental_adulto: 'Transtorno mental adulto',
-  transtorno_mental_infantojuvenil: 'Transtorno infantojuvenil',
-  abuso_de_substancias: 'Abuso de substâncias',
-}
+const motivoLabels: Record<string, string> = MOTIVO_CONTATO_LABELS
 
 export function reasonDistribution(triagens: Triagem[]) {
   const counts: Record<string, number> = {}
@@ -81,13 +79,7 @@ export function reasonDistribution(triagens: Triagem[]) {
   }))
 }
 
-const planoLabels: Record<string, string> = {
-  amil: 'Amil',
-  bradesco_saude: 'Bradesco Saúde',
-  omint: 'Omint',
-  prevent_senior: 'Prevent Sênior',
-  sulamerica: 'SulAmérica',
-}
+const planoLabels: Record<string, string> = PLANO_LABELS
 
 export function healthPlanBreakdown(triagens: Triagem[]) {
   const counts: Record<string, { total: number; converted: number }> = {}
@@ -107,18 +99,12 @@ export function healthPlanBreakdown(triagens: Triagem[]) {
     .slice(0, 10)
 }
 
-const assuntoLabels: Record<string, string> = {
-  internacao: 'Internação',
-  consulta: 'Consulta',
-  informacao_paciente: 'Informação',
-  administrativo: 'Administrativo',
-  outros: 'Outros',
-}
+const assuntoLabels: Record<string, string> = ASSUNTO_LABELS
 
 export function assuntoDistribution(triagens: Triagem[]) {
   const counts: Record<string, number> = {}
   for (const t of triagens) {
-    const key = t.assunto ?? 'outros'
+    const key = t.assunto ?? 'outro_assunto'
     counts[key] = (counts[key] ?? 0) + 1
   }
   return Object.entries(counts)

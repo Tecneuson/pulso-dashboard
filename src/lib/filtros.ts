@@ -7,6 +7,7 @@ import {
 import { CONVENIO_FILTRO, CLASSIFICACAO_FILTRO_OPTS } from '@/lib/funil'
 import { FIELD_OPTIONS } from '@/lib/chatwoot/mapping'
 import type { SituacaoAgendamento } from '@/lib/agendamentos'
+import { isKids } from '@/lib/idade'
 
 /**
  * Sistema de filtros do funil (100% client-side). Multi-seleção por dimensão,
@@ -45,6 +46,8 @@ export interface FiltrosState {
   fonte: '' | 'manual' | 'banco'
   /** Situação do próximo contato — '' = todos. */
   agendado: '' | 'indefinido' | 'em_conformidade' | 'atrasado'
+  /** Kids (8–17 anos, derivado da data de nascimento) — '' = todos. */
+  kids: '' | 'sim' | 'nao'
   ordenar: OrdenacaoFunil
 }
 
@@ -69,6 +72,7 @@ export const FILTROS_INICIAL: FiltrosState = {
   urgencia: '',
   fonte: '',
   agendado: '',
+  kids: '',
   ordenar: 'recentes',
 }
 
@@ -98,6 +102,7 @@ export function contarDimensoesAtivas(f: FiltrosState): number {
   if (f.urgencia) n++
   if (f.fonte) n++
   if (f.agendado) n++
+  if (f.kids) n++
   return n
 }
 
@@ -206,8 +211,12 @@ export function leadPassa(
     return false
   if (on('origens') && f.origens.length && !(l.origem_conversa && f.origens.includes(l.origem_conversa)))
     return false
-  if (on('captadores') && f.captadores.length && !(l.captador_id && f.captadores.includes(l.captador_id)))
-    return false
+  // "Consultor" do lead: coluna consultor_id (lista unificada); captador_id só como legado.
+  {
+    const consultorDoLead = l.consultor_id ?? l.captador_id
+    if (on('captadores') && f.captadores.length && !(consultorDoLead && f.captadores.includes(consultorDoLead)))
+      return false
+  }
   if (
     on('atendentes') &&
     f.atendentes.length &&
@@ -255,6 +264,12 @@ export function leadPassa(
     const manual = !l.conversation_id // sem conversa no Chatwoot = criado manualmente
     if (f.fonte === 'manual' && !manual) return false
     if (f.fonte === 'banco' && manual) return false
+  }
+
+  if (on('kids') && f.kids) {
+    const k = l.kids ?? isKids(l.data_nascimento)
+    if (f.kids === 'sim' && k !== true) return false
+    if (f.kids === 'nao' && k === true) return false
   }
 
   // "Agendados": situação do próximo contato (depende dos agendamentos carregados).
@@ -339,11 +354,7 @@ export function contarOpcao(
 export const OPCOES = {
   etapas: FUNIL_ETAPA_OPTIONS,
   convenios: CONVENIO_FILTRO.map(({ value, label }) => ({ value, label })),
-  motivos: [
-    { value: 'transtorno_mental_adulto', label: 'TM adulto' },
-    { value: 'transtorno_mental_infantojuvenil', label: 'TM infantojuvenil' },
-    { value: 'abuso_de_substancias', label: 'Abuso de substâncias' },
-  ],
+  motivos: FIELD_OPTIONS.motivo_contato ?? [],
   assuntos: FIELD_OPTIONS.assunto ?? [],
   tipos: FIELD_OPTIONS.tipo_contato ?? [],
   origens: ORIGEM_CONVERSA_OPTIONS,

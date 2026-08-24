@@ -1,4 +1,5 @@
 import type { Triagem, EstagioFunil } from '@/types'
+import { MOTIVO_PERDA_LABELS, TIPO_CONTATO_LABELS } from '@/types'
 import { FUNIL_ETAPAS, FUNIL_ETAPA_LABELS, etapaFromEstagio } from './funil-etapas'
 
 export function funnelBreakdown(triagens: Triagem[]) {
@@ -71,14 +72,7 @@ export function paraQuemBreakdown(triagens: Triagem[]) {
 }
 
 export function tipoContatoBreakdown(triagens: Triagem[]) {
-  const labels: Record<string, string> = {
-    lead: 'Lead',
-    ex_paciente: 'Ex-paciente',
-    responsavel: 'Responsável',
-    responsavel_lead: 'Resp. do lead',
-    responsavel_ex_paciente: 'Resp. do ex-paciente',
-    parceiro: 'Parceiro',
-  }
+  const labels: Record<string, string> = TIPO_CONTATO_LABELS
   const counts: Record<string, number> = {}
   for (const t of triagens) {
     const key = t.tipo_contato ?? 'nao_informado'
@@ -90,17 +84,7 @@ export function tipoContatoBreakdown(triagens: Triagem[]) {
 }
 
 export function lossReasons(triagens: Triagem[]) {
-  const labels: Record<string, string> = {
-    parou_de_interagir: 'Parou de interagir',
-    desistiu_do_tratamento: 'Desistiu',
-    financeiro: 'Financeiro',
-    plano_nao_autorizou: 'Plano não autorizou',
-    plano_sem_convenio: 'Plano sem convênio',
-    nao_tem_plano: 'Não tem plano',
-    nao_gostou_do_hospital: 'Não gostou',
-    sus: 'SUS',
-    outro: 'Outro',
-  }
+  const labels: Record<string, string> = MOTIVO_PERDA_LABELS
   const counts: Record<string, number> = {}
   for (const t of triagens) {
     if (!t.motivo_perda) continue

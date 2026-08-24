@@ -38,6 +38,8 @@ interface KanbanBoardProps {
   onStageChange?: (id: string, etapa: FunilEtapa) => void
   /** Arrastar p/ Internação: exige número do paciente, então abre o card em vez de mover. */
   onInternarRequest?: (id: string) => void
+  /** Arrastar p/ Perdido: exige motivo da perda (regra 11/12), então abre o card no painel de perda. */
+  onPerdaRequest?: (id: string) => void
   onCardClick?: (triagem: LeadComEtapa) => void
   /** Busca/convênios aplicados no servidor às colunas de pacientes. */
   pacienteQuery?: PacienteQuery
@@ -56,6 +58,7 @@ export function KanbanBoard({
   triagens,
   onStageChange,
   onInternarRequest,
+  onPerdaRequest,
   onCardClick,
   pacienteQuery = {},
   classificacoesFiltro = [],
@@ -114,6 +117,10 @@ export function KanbanBoard({
     // Internar exige o número do paciente: não move direto, abre o card no painel.
     if (target === 'internacao') {
       onInternarRequest?.(id)
+      return
+    }
+    if (target === 'perdido') {
+      onPerdaRequest?.(id)
       return
     }
 

@@ -1,244 +1,165 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import {
-  chatwootConfigured,
-  getConversation,
-  updateContactCustomAttributes,
-  updateConversationCustomAttributes,
-  setConversationLabels,
-  postPrivateNote,
-} from '@/lib/chatwoot/client'
-import {
-  contactAttrsFromTriagem,
-  conversationAttrsFromTriagem,
-  ETAPA_CONTATO_LABEL,
-} from '@/lib/chatwoot/mapping'
-import type { Triagem } from '@/types'
+import { requireUserApi } from '@/lib/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { isKids } from '@/lib/idade'
+import { chatwootConfigured } from '@/lib/chatwoot/client'
+import { listarCampos, sincronizarSePreciso } from '@/lib/chatwoot/campos'
+import { chatwootAttrsFromAtributos, coerceCampoValor, contactAttrsFromTriagem } from '@/lib/chatwoot/mapping'
+import { encontrarOuCriarContato, pushTriagemParaChatwoot } from '@/lib/chatwoot/sync'
+import { escreverComRedeDeSeguranca, inserirComRedeDeSeguranca, type AnyObj } from '@/lib/triagem-db'
+import { triagemCreateSchema, triagemPatchSchema, zodMensagem } from '@/lib/validation'
 
-// Campos do triagem_hsm que o dashboard pode editar. Os que têm mapeamento em
-// chatwoot/mapping.ts sincronizam com o Chatwoot; os demais (contact_name, número,
-// origem_*) só gravam no banco.
-const SYNCABLE: (keyof Triagem)[] = [
-  'estagio_funil',
-  'plano_saude',
-  'tipo_contato',
-  'para_quem',
-  'motivo_contato',
-  'forma_internacao',
-  'assunto',
-  'motivo_perda',
-  'observacoes',
-  'tags',
-  'status',
-  'motivo_desqualificacao',
-  'paciente_id',
-  'contact_name',
-  'data_nascimento',
-  'elegivel',
-  // Dados de contato: só gravam no banco. O webhook do Chatwoot não mexe neles
-  // (o mapeamento cobre apenas atributos customizados), então não são sobrescritos.
-  'phone',
-  'email',
-  'numero_paciente',
-  'origem_conversa',
-  'origem_hospital_id',
-  'origem_consultor_id',
-  'origem_profissional_tipo',
-  'captador_id',
-]
+/**
+ * Leads (triagem_hsm). Toda escrita passa por validação (zod) e, quando há vínculo com o
+ * Chatwoot (conversa ou contato), é espelhada lá (best-effort, nunca derruba a gravação).
+ * `observacoes` deixou de ser editável aqui: anotações vivem em /api/anotacoes (histórico).
+ */
 
-// Campos aceitos ao criar um lead manualmente (sem passar pelo Chatwoot/n8n).
-const CREATABLE: (keyof Triagem)[] = [
-  'contact_name',
-  'phone',
-  'email',
-  'data_nascimento',
-  'tipo_contato',
-  'plano_saude',
-  'motivo_contato',
-  'observacoes',
-  'origem_conversa',
-  'origem_hospital_id',
-  'origem_consultor_id',
-  'origem_profissional_tipo',
-  'captador_id',
-]
+/** Valida/coage os campos dinâmicos contra o cadastro (chaves desconhecidas são descartadas). */
+async function normalizarAtributos(atributos: Record<string, unknown> | null | undefined, atual: AnyObj | null) {
+  if (atributos === undefined) return undefined
+  const campos = await listarCampos({ somenteAtivos: true })
+  const out: AnyObj = { ...((atual?.atributos as AnyObj | null) ?? {}) }
+  for (const c of campos) {
+    if (atributos && c.chave in atributos) out[c.chave] = coerceCampoValor(c, atributos[c.chave])
+  }
+  return out
+}
 
 // Triagens de um paciente (contatos associados no funil unificado).
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { supabase, error } = await requireUserApi()
+  if (error) return error
 
   const pacienteId = request.nextUrl.searchParams.get('paciente_id')
-  if (!pacienteId) {
+  if (!pacienteId || !/^[0-9a-f-]{36}$/i.test(pacienteId)) {
     return NextResponse.json({ error: 'paciente_id obrigatório' }, { status: 400 })
   }
 
-  const { data, error } = await supabase
+  const { data, error: dbErr } = await supabase
     .from('triagem_hsm')
-    .select(
-      'id, contact_name, phone, email, conversation_id, estagio_funil, motivo_perda, tipo_contato, created_at, updated_at'
-    )
+    .select('*')
     .eq('paciente_id', pacienteId)
     .order('updated_at', { ascending: false })
     .limit(50)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ rows: data ?? [] })
+  if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 })
+  const rows = (data ?? []).map((t) => ({
+    id: t.id,
+    contact_name: t.contact_name,
+    phone: t.phone,
+    email: t.email,
+    conversation_id: t.conversation_id,
+    chatwoot_contact_id: t.chatwoot_contact_id ?? null,
+    estagio_funil: t.estagio_funil,
+    motivo_perda: t.motivo_perda,
+    tipo_contato: t.tipo_contato,
+    created_at: t.created_at,
+    updated_at: t.updated_at,
+  }))
+  return NextResponse.json({ rows })
 }
 
-// Cria um lead manualmente (sem conversa no Chatwoot). Entra no funil como "Contato".
+// Cria um lead manualmente. Entra no funil como "Contato" e é espelhado no Chatwoot
+// como CONTATO (com todos os atributos) — sem abrir conversa.
 export async function POST(request: NextRequest) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { supabase, user, error } = await requireUserApi()
+  if (error) return error
 
-  const body = await request.json().catch(() => null)
-  const nome = typeof body?.contact_name === 'string' ? body.contact_name.trim() : ''
-  if (!nome) return NextResponse.json({ error: 'contact_name obrigatório' }, { status: 400 })
+  const parsed = triagemCreateSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: zodMensagem(parsed.error) }, { status: 400 })
+  const { anotacao_inicial, atributos, ...campos } = parsed.data
 
-  const row: Record<string, unknown> = { contact_name: nome, estagio_funil: null }
-  for (const k of CREATABLE) {
-    if (k === 'contact_name') continue
-    if (body && k in body && body[k] !== '' && body[k] != null) row[k] = body[k]
+  const row: AnyObj = { estagio_funil: null, status: 'em_triagem' }
+  for (const [k, v] of Object.entries(campos)) if (v !== undefined && v !== null && v !== '') row[k] = v
+  row.kids = isKids(row.data_nascimento)
+  const atributosNorm = await normalizarAtributos(atributos ?? {}, null)
+  if (atributosNorm && Object.keys(atributosNorm).length) row.atributos = atributosNorm
+
+  let criado: AnyObj | null
+  try {
+    criado = await inserirComRedeDeSeguranca(supabase, row)
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
+  if (!criado) return NextResponse.json({ error: 'falha ao criar o lead' }, { status: 500 })
 
-  const { data, error } = await supabase
-    .from('triagem_hsm')
-    .insert(row)
-    .select('*')
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ triagem: data })
-}
-
-export async function PATCH(request: NextRequest) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-
-  const body = await request.json().catch(() => null)
-  const id: string | undefined = body?.id
-  if (!id || typeof body !== 'object') {
-    return NextResponse.json({ error: 'invalid payload' }, { status: 400 })
-  }
-
-  const patch: Record<string, unknown> = {}
-  for (const k of SYNCABLE) if (k in body) patch[k] = body[k]
-  if (Object.keys(patch).length === 0) {
-    return NextResponse.json({ error: 'no syncable fields' }, { status: 400 })
-  }
-
-  if (
-    'paciente_id' in patch &&
-    patch.paciente_id !== null &&
-    !/^[0-9a-f-]{36}$/i.test(String(patch.paciente_id))
-  ) {
-    return NextResponse.json({ error: 'paciente_id inválido' }, { status: 400 })
-  }
-
-  // Observação anterior — para lançar nota no Chatwoot só quando realmente mudar.
-  let obsAntes: string | null = null
-  if ('observacoes' in patch) {
-    const { data: cur } = await supabase
-      .from('triagem_hsm')
-      .select('observacoes')
-      .eq('id', id)
-      .single()
-    obsAntes = (cur?.observacoes as string | null) ?? null
-  }
-
-  // 1) Grava no banco (sessão autenticada → RLS)
-  let { data: updated, error } = await supabase
-    .from('triagem_hsm')
-    .update(patch)
-    .eq('id', id)
-    .select('*')
-    .single()
-
-  // Rede de segurança: se alguma coluna ainda não existe no banco (migration pendente),
-  // remove só ela do patch e regrava, em vez de derrubar a edição inteira.
-  if (error && /column .* does not exist/i.test(error.message)) {
-    const col = error.message.match(/column "?[\w.]*?\.?(\w+)"? does not exist/i)?.[1]
-    if (col && col in patch) {
-      console.warn(`[triagem] coluna ausente no banco: ${col} — salvando sem ela`)
-      delete patch[col]
-      ;({ data: updated, error } = await supabase
-        .from('triagem_hsm')
-        .update(patch)
-        .eq('id', id)
-        .select('*')
-        .single())
-    }
-  }
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // 2) Empurra pro Chatwoot (best-effort — não falha a gravação do banco)
+  // Espelho no Chatwoot: contato com todos os campos (item 8).
   let chatwoot: 'ok' | 'skipped' | 'failed' = 'skipped'
-  const convId = updated?.conversation_id as string | null | undefined
-  if (chatwootConfigured() && convId) {
-    try {
-      const conv = await getConversation(convId)
-      const contactId = conv.meta?.sender?.id
-      const contactAttrs = contactAttrsFromTriagem(patch as Partial<Triagem>)
-      const convAttrs = conversationAttrsFromTriagem(patch as Partial<Triagem>)
-
-      // Etapa "Contato" grava estagio_funil=null; limpa o rótulo antigo no Chatwoot
-      // (o mapeamento ignora valores nulos, senão o atributo ficaria preso no valor anterior).
-      if ('estagio_funil' in patch && patch.estagio_funil === null) {
-        contactAttrs['estagio_no_funil'] = ETAPA_CONTATO_LABEL
-        convAttrs['venda'] = 'Não'
-      }
-
-      // Origem da conversa → nomes do hospital/consultor nos atributos da conversa.
-      if ('origem_hospital_id' in patch || 'origem_conversa' in patch) {
-        const hid = updated?.origem_hospital_id as string | null | undefined
-        let nome = ''
-        if (hid) {
-          const { data: h } = await supabase.from('hospitais').select('nome').eq('id', hid).single()
-          nome = (h?.nome as string) ?? ''
-        }
-        convAttrs['hospital_origem'] = nome
-      }
-      if ('origem_consultor_id' in patch || 'origem_conversa' in patch) {
-        const cid = updated?.origem_consultor_id as string | null | undefined
-        let nome = ''
-        if (cid) {
-          const { data: c } = await supabase.from('consultores').select('nome').eq('id', cid).single()
-          nome = (c?.nome as string) ?? ''
-        }
-        convAttrs['consultor_origem'] = nome
-      }
-
-      if (contactId && Object.keys(contactAttrs).length) {
-        await updateContactCustomAttributes(contactId, contactAttrs, conv.meta?.sender?.custom_attributes)
-      }
-      if (Object.keys(convAttrs).length) {
-        // passa os atributos atuais para MESCLAR (o endpoint do Chatwoot substitui tudo)
-        await updateConversationCustomAttributes(convId, convAttrs, conv.custom_attributes)
-      }
-      if (Array.isArray(patch.tags)) {
-        await setConversationLabels(convId, patch.tags as string[])
-      }
-      // Observações → NOTA PRIVADA na conversa (não atributo). Só quando mudou e não vazio.
-      const obsNova = (patch.observacoes as string | null | undefined) ?? null
-      if (obsNova && obsNova.trim() && obsNova !== obsAntes) {
-        await postPrivateNote(convId, `📝 Observação (CRM): ${obsNova.trim()}`)
-      }
+  if (chatwootConfigured() && (criado.phone || criado.email)) {
+    const camposDef = await listarCampos({ somenteAtivos: true })
+    const attrs = {
+      ...contactAttrsFromTriagem(criado),
+      ...chatwootAttrsFromAtributos(camposDef, criado.atributos).contact,
+    }
+    const contactId = await encontrarOuCriarContato(
+      { contact_name: criado.contact_name, phone: criado.phone, email: criado.email },
+      attrs
+    )
+    if (contactId) {
       chatwoot = 'ok'
-    } catch (e) {
-      console.error('[sync triagem->chatwoot]', e)
+      const admin = createAdminClient()
+      const salvo = await escreverComRedeDeSeguranca(admin, { id: criado.id }, { chatwoot_contact_id: contactId })
+      if (salvo) criado = salvo
+    } else {
       chatwoot = 'failed'
     }
   }
 
-  return NextResponse.json({ ok: true, chatwoot, triagem: updated })
+  // Anotação inicial → histórico (sem conversa ainda, não vai para o Chatwoot).
+  if (anotacao_inicial && anotacao_inicial.trim()) {
+    const admin = createAdminClient()
+    await admin.from('anotacoes').insert({ triagem_id: criado.id, usuario_id: user!.id, conteudo: anotacao_inicial.trim(), origem: 'crm' })
+  }
+
+  return NextResponse.json({ triagem: criado, chatwoot })
 }
+
+export async function PATCH(request: NextRequest) {
+  const { supabase, error } = await requireUserApi()
+  if (error) return error
+
+  const parsed = triagemPatchSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: zodMensagem(parsed.error) }, { status: 400 })
+  const { id, ...body } = parsed.data
+
+  const patch: AnyObj = {}
+  for (const [k, v] of Object.entries(body)) if (v !== undefined) patch[k] = v
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: 'no syncable fields' }, { status: 400 })
+  }
+
+  void sincronizarSePreciso()
+
+  // Linha atual (RLS): base para mesclar atributos e derivar kids.
+  // '*' de propósito: listar colunas novas quebraria a edição enquanto a migration não roda.
+  const { data: atual } = await supabase.from('triagem_hsm').select('*').eq('id', id).maybeSingle()
+  if (!atual) return NextResponse.json({ error: 'lead não encontrado' }, { status: 404 })
+
+  if ('atributos' in patch) patch.atributos = await normalizarAtributos(patch.atributos, atual)
+  if ('data_nascimento' in patch) patch.kids = isKids(patch.data_nascimento)
+  // Sair de "Perdido" limpa o motivo; entrar em "Internação" limpa também.
+  if ('estagio_funil' in patch && patch.estagio_funil !== 'recusou_internacao' && !('motivo_perda' in patch)) {
+    if (patch.estagio_funil === 'internado' || atual.motivo_perda) patch.motivo_perda = null
+  }
+
+  // 1) Grava no banco (sessão autenticada → RLS) com rede de segurança p/ coluna ausente.
+  let updated: AnyObj | null
+  try {
+    updated = await escreverComRedeDeSeguranca(supabase, { id }, patch)
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+  }
+  if (!updated) return NextResponse.json({ error: 'lead não encontrado' }, { status: 404 })
+
+  // 2) Empurra pro Chatwoot (best-effort — não falha a gravação do banco)
+  const push = await pushTriagemParaChatwoot(supabase, updated, patch)
+  if (push.contactId && !updated.chatwoot_contact_id) {
+    const admin = createAdminClient()
+    const salvo = await escreverComRedeDeSeguranca(admin, { id }, { chatwoot_contact_id: push.contactId })
+    if (salvo) updated = salvo
+  }
+
+  return NextResponse.json({ ok: true, chatwoot: push.status, chatwootDetalhes: push.detalhes, triagem: updated })
+}
+

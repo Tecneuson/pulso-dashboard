@@ -6,13 +6,15 @@ import { Input, EtapaBadge } from '@/components/ui'
 import { CardDetail } from '@/components/kanban/card-detail'
 import type { Triagem, TriagemLead } from '@/types'
 import { comEtapa, etapaFromEstagio } from '@/lib/funil-etapas'
+import { chatwootConversationUrl } from '@/lib/chatwoot/urls'
 
 interface ConversationListProps {
   triagens: Triagem[]
+  /** Mantido por compatibilidade; a URL agora vem de NEXT_PUBLIC_CHATWOOT_BASE_URL/ACCOUNT_ID. */
   chatwootBaseUrl?: string
 }
 
-export function ConversationList({ triagens, chatwootBaseUrl }: ConversationListProps) {
+export function ConversationList({ triagens }: ConversationListProps) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'concluidas' | 'em_andamento' | 'transbordadas'>(
     'all'
@@ -93,10 +95,7 @@ export function ConversationList({ triagens, chatwootBaseUrl }: ConversationList
           </div>
         )}
         {filtered.map((t) => {
-          const chatwootUrl =
-            chatwootBaseUrl && t.conversation_id
-              ? `${chatwootBaseUrl}/app/accounts/1/conversations/${t.conversation_id}`
-              : null
+          const chatwootUrl = chatwootConversationUrl(t.conversation_id)
 
           return (
             <div

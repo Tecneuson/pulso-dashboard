@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useSyncExternalStore } from 'react'
-import type { Agendamento, Captador, Consultor, Hospital } from '@/types'
+import type { Agendamento, CampoPersonalizado, Captador, Consultor, Hospital } from '@/types'
 import { chaveAlvo, situacaoAgendamento, type SituacaoAgendamento } from '@/lib/agendamentos'
 
 /**
@@ -102,6 +102,7 @@ const consultoresCol = new ApiCollection<Consultor>('/api/consultores')
 const hospitaisCol = new ApiCollection<Hospital>('/api/hospitais')
 const captadoresCol = new ApiCollection<Captador>('/api/captadores')
 const usuariosCol = new ApiCollection<UsuarioResumo>('/api/usuarios')
+const camposCol = new ApiCollection<CampoPersonalizado>('/api/campos')
 /** Só os agendamentos PENDENTES — é o que o card do funil precisa (próximo contato). */
 const agendamentosCol = new ApiCollection<Agendamento>('/api/agendamentos', '?status=pendente')
 
@@ -147,6 +148,24 @@ export function useCaptadores() {
     update: captadoresCol.update,
     remove: captadoresCol.remove,
     error: captadoresCol.getError(),
+  }
+}
+
+/**
+ * Campos personalizados (espelho do Chatwoot). `ativos` é o que o card/formulário
+ * renderiza; a tela de Configurações usa `items` (inclui inativos).
+ */
+export function useCampos() {
+  const items = useSyncExternalStore(camposCol.subscribe, camposCol.getSnapshot, camposCol.getServerSnapshot)
+  const ativos = useMemo(() => items.filter((c) => c.ativo), [items])
+  return {
+    items,
+    ativos,
+    add: camposCol.add,
+    update: camposCol.update,
+    remove: camposCol.remove,
+    refresh: () => camposCol.load(),
+    error: camposCol.getError(),
   }
 }
 

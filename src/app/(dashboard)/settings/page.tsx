@@ -2,7 +2,9 @@ import { Database, MessageSquare, Workflow, ExternalLink, Hospital } from 'lucid
 import { Header } from '@/components/layout/header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui'
 import { Cadastros } from '@/components/settings/cadastros'
+import { CamposPersonalizados } from '@/components/settings/campos-personalizados'
 import { requireGestor } from '@/lib/auth'
+import { botAtivo, exigirDesfecho, n8nAtivo } from '@/lib/env'
 
 interface IntegrationProps {
   icon: React.ReactNode
@@ -59,6 +61,8 @@ export default async function SettingsPage() {
   await requireGestor()
   const chatwootUrl = process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const n8n = n8nAtivo()
+  const webhookOk = !!process.env.CHATWOOT_WEBHOOK_SECRET
 
   return (
     <>
@@ -81,16 +85,20 @@ export default async function SettingsPage() {
               <Integration
                 icon={<MessageSquare size={18} />}
                 title="Chatwoot"
-                status={chatwootUrl ? 'online' : 'pendente'}
-                description="Plataforma de atendimento ao cliente"
+                status={chatwootUrl ? (webhookOk ? 'online' : 'configurado') : 'pendente'}
+                description={`Central dos campos e conversas. Sync bidirecional${webhookOk ? ' · webhook protegido' : ' · CHATWOOT_WEBHOOK_SECRET pendente'}${exigirDesfecho() ? ' · encerrar exige venda/motivo' : ''}`}
                 url={chatwootUrl}
               />
               <Integration
                 icon={<Workflow size={18} />}
-                title="N8N — Agente IA"
-                status="online"
-                description="Agente virtual de triagem (GPT-4.1-mini)"
-                url="https://hospitalsantamonica.app.n8n.cloud"
+                title={n8n ? 'n8n — bot Mônica + automações' : 'Modo sem n8n (app cuida de tudo)'}
+                status={n8n ? 'online' : botAtivo() ? 'online' : 'configurado'}
+                description={
+                  n8n
+                    ? 'Triagem por IA, 1º contato, roleta e encerramento automático rodam no n8n (N8N_ATIVO=1).'
+                    : `1º contato, roleta, encerramento e sync rodam no app${botAtivo() ? ' · bot Mônica interno ligado' : ' · bot interno desligado (BOT_ENABLED)'}.`
+                }
+                url={n8n ? 'https://hospitalsantamonica.app.n8n.cloud' : undefined}
               />
             </div>
           </CardContent>
@@ -176,6 +184,10 @@ export default async function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="mt-4">
+        <CamposPersonalizados />
+      </div>
 
       <div className="mt-4">
         <Cadastros />

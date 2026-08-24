@@ -28,6 +28,7 @@ export function KanbanView({ triagens }: KanbanViewProps) {
   const [items, setItems] = useState<TriagemLead[]>(triagens)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [autoInternar, setAutoInternar] = useState(false)
+  const [autoPerda, setAutoPerda] = useState(false)
   const [showLeadForm, setShowLeadForm] = useState(false)
   const [filtros, setFiltros] = useState<FiltrosState>(FILTROS_INICIAL)
   const [qDebounced, setQDebounced] = useState('')
@@ -93,6 +94,7 @@ export function KanbanView({ triagens }: KanbanViewProps) {
     setItems((prev) => [novo, ...prev])
     setSelectedId(novo.id)
     setAutoInternar(false)
+    setAutoPerda(false)
   }
 
   return (
@@ -130,10 +132,17 @@ export function KanbanView({ triagens }: KanbanViewProps) {
             onInternarRequest={(id) => {
               setSelectedId(id)
               setAutoInternar(true)
+              setAutoPerda(false)
+            }}
+            onPerdaRequest={(id) => {
+              setSelectedId(id)
+              setAutoPerda(true)
+              setAutoInternar(false)
             }}
             onCardClick={(t) => {
               setSelectedId(t.id)
               setAutoInternar(false)
+              setAutoPerda(false)
             }}
             pacienteQuery={{ q: qDebounced, convenios: filtros.convenios }}
             classificacoesFiltro={filtros.classificacoes}
@@ -147,9 +156,11 @@ export function KanbanView({ triagens }: KanbanViewProps) {
         triagem={selected}
         open={!!selected}
         autoInternar={autoInternar}
+        autoPerda={autoPerda}
         onClose={() => {
           setSelectedId(null)
           setAutoInternar(false)
+          setAutoPerda(false)
         }}
         onSaved={handleSaved}
       />
