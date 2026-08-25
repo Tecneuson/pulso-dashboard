@@ -7,10 +7,11 @@
 --         coluna triagem_hsm.atributos), contato do Chatwoot vinculado ao lead
 --  4/5    data_nascimento + kids (8–17 anos, trigger automático)
 --  7      perfil do contato: lead | ex_paciente | responsavel | medico | consultor (categorias derivadas)
---  BI     30 motivos de perda oficiais, consultores unificados (+seed do CSV), chatwoot_status
+--  BI     30 motivos de perda oficiais, consultores unificados, chatwoot_status
 --  10     anotações do Chatwoot no histórico (origem/autor/id da mensagem)
 --  12     contador de reaberturas por falta de desfecho
---  seg.   policies permissivas demais em triagem_hsm (anon podia ler/escrever)
+--  seg.   policies permissivas demais em triagem_hsm (higiene: o papel `anon` não tem
+--         GRANT nessas tabelas — conferido em 25/08 — mas as policies valiam p/ qualquer papel)
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -250,7 +251,7 @@ COMMENT ON COLUMN public.usuarios.chatwoot_agent_id IS 'Id do agente no Chatwoot
 
 -- -----------------------------------------------------------------------------
 -- 6b) Consultores: lista ÚNICA (`consultores`) — acaba a duplicidade com `captadores`.
---     Semeia os nomes do CSV do cliente e migra os vínculos captador_id → consultor_id.
+--     Importa quem só existia em `captadores` e migra os vínculos captador_id → consultor_id.
 -- -----------------------------------------------------------------------------
 -- Nome único (case-insensitive) para o seed ser idempotente.
 DELETE FROM public.consultores a USING public.consultores b
@@ -264,9 +265,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_consultores_nome ON public.consultores (low
 -- copiando as opções de `consultor_origem` (Configurações → Sincronizar faz isso ao contrário).
 
 -- Quem só existia em captadores também entra na lista única.
+-- DISTINCT ON: se `captadores` tiver dois nomes iguais ignorando maiúsculas (ex.: "arthur"/"Arthur"),
+-- o INSERT tentaria gravar os dois e bateria no índice único criado acima.
 INSERT INTO public.consultores (nome, telefone, email, observacoes, ativo)
-SELECT k.nome, k.telefone, k.email, k.observacoes, k.ativo FROM public.captadores k
-WHERE NOT EXISTS (SELECT 1 FROM public.consultores c WHERE lower(trim(c.nome)) = lower(trim(k.nome)));
+SELECT DISTINCT ON (lower(trim(k.nome))) k.nome, k.telefone, k.email, k.observacoes, k.ativo
+FROM public.captadores k
+WHERE NOT EXISTS (SELECT 1 FROM public.consultores c WHERE lower(trim(c.nome)) = lower(trim(k.nome)))
+ORDER BY lower(trim(k.nome)), k.created_at;
 
 ALTER TABLE public.triagem_hsm ADD COLUMN IF NOT EXISTS consultor_id uuid REFERENCES public.consultores(id) ON DELETE SET NULL;
 ALTER TABLE public.pacientes   ADD COLUMN IF NOT EXISTS consultor_id uuid REFERENCES public.consultores(id) ON DELETE SET NULL;
@@ -309,11 +314,47 @@ DROP POLICY IF EXISTS triagem_insert_auth ON public.triagem_hsm;
 CREATE POLICY triagem_insert_auth ON public.triagem_hsm
   FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
 
--- Garante RLS ligada nas tabelas sensíveis (não muda policies existentes).
+-- Garante RLS ligada nas tabelas sensíveis.
+-- ⚠️ Ligar RLS numa tabela SEM policy bloqueia TODO acesso do usuário logado (o service_role
+-- continua passando). Como `pacientes`/`usuarios`/`anotacoes` foram criadas fora das migrações,
+-- não dá para saber daqui se já têm policy — então, quando não houver NENHUMA, criamos a
+-- permissiva mínima que mantém o app funcionando (é o comportamento de hoje, não afrouxa nada).
+-- Se a tabela já tiver policies, nada é alterado.
 ALTER TABLE public.triagem_hsm ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.anotacoes ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.pacientes ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'pacientes') THEN
+    CREATE POLICY pacientes_rw_auth ON public.pacientes
+      FOR ALL TO authenticated USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+    RAISE NOTICE 'RLS de pacientes estava sem policy — criada pacientes_rw_auth (equipe logada).';
+  END IF;
+END $$;
+
+-- `usuarios`: só LEITURA para a equipe (o card mostra o agente e o filtro lista a equipe).
+-- Nada de FOR ALL aqui — daria a qualquer usuário logado o poder de mudar o próprio `role`.
 ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'usuarios') THEN
+    CREATE POLICY usuarios_select_auth ON public.usuarios
+      FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
+    RAISE NOTICE 'RLS de usuarios estava sem policy — criada usuarios_select_auth (somente leitura).';
+  END IF;
+END $$;
+
+-- `anotacoes`: o app lê/escreve via service_role (rota /api/anotacoes), mas garantimos leitura
+-- para a equipe caso alguma tela passe a consultar direto.
+ALTER TABLE public.anotacoes ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'anotacoes') THEN
+    CREATE POLICY anotacoes_select_auth ON public.anotacoes
+      FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
+    RAISE NOTICE 'RLS de anotacoes estava sem policy — criada anotacoes_select_auth (somente leitura).';
+  END IF;
+END $$;
 
 -- -----------------------------------------------------------------------------
 -- 8) Conferência (opcional): policies que ainda valem para `anon`/`public`
