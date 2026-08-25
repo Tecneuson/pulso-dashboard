@@ -257,58 +257,11 @@ DELETE FROM public.consultores a USING public.consultores b
   WHERE a.ctid > b.ctid AND lower(trim(a.nome)) = lower(trim(b.nome));
 CREATE UNIQUE INDEX IF NOT EXISTS uq_consultores_nome ON public.consultores (lower(trim(nome)));
 
-INSERT INTO public.consultores (nome)
-SELECT v.nome FROM (VALUES
-  ('Adriana Higienopolis'),
-  ('Adriano Almeida'),
-  ('Alex'),
-  ('Beatriz Santos'),
-  ('Bruno Santos'),
-  ('Carlos Polli'),
-  ('Cátia'),
-  ('Danilo Silva'),
-  ('Daniel Garcia'),
-  ('David Duarte'),
-  ('Diego Antônio Rodrigues dos Santo'),
-  ('Diego de Jesus'),
-  ('Edilma Pinheiro'),
-  ('Eduardo Andrade'),
-  ('Eduardo Gatti'),
-  ('Felipe Medeiros'),
-  ('Felipe Trindade'),
-  ('Fabiano Freitas'),
-  ('Fernando Casoto'),
-  ('Fernando Zaccardi'),
-  ('Gisele Silva'),
-  ('Gisleine Fatibello'),
-  ('Gustavo'),
-  ('Igor'),
-  ('Jefferson'),
-  ('Junior Alcantara'),
-  ('Karen'),
-  ('Karina Yukari'),
-  ('Leandro Silva'),
-  ('Luiz Alpha Remoções'),
-  ('Manoelio Prado'),
-  ('Paulo Cesa'),
-  ('Paulo Malta'),
-  ('Paulo Rondon'),
-  ('Rafael Azevedo'),
-  ('Ronaldo Cazissi'),
-  ('Rosana Fatibello'),
-  ('Rodrigo Toledo'),
-  ('Tatiana Nunes'),
-  ('Thayane Vasconcelos'),
-  ('Thiago Araujo'),
-  ('Thiago Lennon'),
-  ('Thiago Silva'),
-  ('Uilian de Almeida'),
-  ('Wesley Abrantes'),
-  ('William Antonio da Rocha'),
-  ('Iusi Moreira'),
-  ('Audrei Ribeiro')
-) AS v(nome)
-WHERE NOT EXISTS (SELECT 1 FROM public.consultores c WHERE lower(trim(c.nome)) = lower(trim(v.nome)));
+-- (removido em 25/08) Seed dos 48 nomes do CSV: a lista de consultores JÁ FOI populada em
+-- produção a partir da lista `consultor_origem` do Chatwoot (grafias oficiais da equipe:
+-- "Catia", "Jeferson", "Karem", "Fernanda Zaccardi"…). Inserir as variantes do CSV criaria
+-- quase-duplicatas. O Chatwoot é a central — a lista de lá vence. Num banco novo, semear
+-- copiando as opções de `consultor_origem` (Configurações → Sincronizar faz isso ao contrário).
 
 -- Quem só existia em captadores também entra na lista única.
 INSERT INTO public.consultores (nome, telefone, email, observacoes, ativo)

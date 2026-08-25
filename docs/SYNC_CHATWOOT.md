@@ -29,7 +29,7 @@ análise do **modo sem n8n**.
 | 11 | Venda / motivo de perda no Chatwoot ⇄ CRM | `venda = Sim` → Internação; `motivo_de_perda` → Perdido (+motivo). CRM → Chatwoot já existia (`venda` derivado, `motivo_de_perda`) |
 | BI | Relatórios (visão do cliente) | `/reports`: big numbers (contatos, conversas, internações, perdas), motivos de perda (30 oficiais), origens, forma de internação por plano (com motivos), pipeline com churn, perfil, status das conversas (Chatwoot ao vivo + por período), filtros de período e atendente (`src/lib/bi.ts`) |
 | BI | Motivos de perda oficiais | 30 valores do CSV (`MOTIVO_PERDA` em `src/types`), migração dos slugs antigos, lista exata no Chatwoot, `Snake to Label` do n8n v16; encerramento automático usa "Falta de Interação" |
-| BI | Consultores | lista única `consultores` (48 nomes do CSV semeados pela migration), `consultor_id` em leads e pacientes (backfill por nome a partir de `captadores`, que vira legado) |
+| BI | Consultores | lista única `consultores` (populada em produção a partir do Chatwoot; seed do CSV removido da migration para não duplicar grafias), `consultor_id` em leads e pacientes (backfill por nome a partir de `captadores`, que vira legado) |
 | 12 | Não encerra sem venda/motivo | `conversation_status_changed` → `resolved` sem desfecho ⇒ reabre + nota privada explicando (máx. 3 vezes por conversa). Encerramento automático por inatividade marca "Parou de interagir" antes (n8n v2 e cron do app). Reabrir depois disso devolve o lead para "Atendendo". |
 
 ## 3. O que você precisa fazer (uma vez)
@@ -40,7 +40,7 @@ análise do **modo sem n8n**.
 4. **Sincronizar definições**: Configurações → Campos personalizados → "Sincronizar com o Chatwoot". Atenção ao que isso muda nas listas do Chatwoot (conferido ao vivo em 23/08):
    - `quem_e_o_contato`: hoje tem **Paciente | Responsável | Consultor**; passa a ter os 5 perfis do BI (**Lead | Ex-paciente | Responsável | Médico | Consultor**). Valores antigos continuam legíveis (Paciente → Lead). Se preferir manter 3, tire `quem_e_o_contato` de `LISTAS_EXATAS` em `campos.ts` e troque as opções em `attributes.ts`.
    - `motivo_de_perda`: a lista intermediária (21 itens, ex.: "Carência", "Alta na origem", "Colaborador do hospital") vira a lista oficial de 30 do CSV; os rótulos antigos seguem sendo traduzidos (`mapping.ts`).
-   - `consultor_origem`: as opções passam a ser a tabela `consultores` do CRM (lista única; os 48 nomes do CSV entram pela migration). Grafias diferentes que só existiam no Chatwoot ("Karem", "Jeferson", "Rosana Fattibello"…) ficam apenas nos valores já gravados.
+   - `consultor_origem`: as opções passam a ser a tabela `consultores` do CRM (lista única). Em 24/08 a tabela foi populada em produção com as grafias do Chatwoot ("Catia", "Jeferson", "Karem"…), então o seed do CSV foi REMOVIDO da migration (evita quase-duplicatas tipo "Cátia"/"Catia"). O CSV do cliente diverge da lista oficial em ~8 grafias — se quiserem padronizar, renomear direto em Configurações → Consultores.
    - `hospital_origem` não é alterado (o CRM importa os hospitais de lá, e não o contrário).
    - `numero-carteirinha` e `nome_do_responsavel` (já existem no Chatwoot) viram campos personalizados no card automaticamente.
    Depois, "Auditar atributos" mostra o que sobrou (`outras_origem`/`conversa_outras_origem` são legados).
