@@ -30,6 +30,7 @@ análise do **modo sem n8n**.
 | BI | Relatórios (visão do cliente) | `/reports`: big numbers (contatos, conversas, internações, perdas), motivos de perda (30 oficiais), origens, forma de internação por plano (com motivos), pipeline com churn, perfil, status das conversas (Chatwoot ao vivo + por período), filtros de período e atendente (`src/lib/bi.ts`) |
 | BI | Motivos de perda oficiais | 30 valores do CSV (`MOTIVO_PERDA` em `src/types`), migração dos slugs antigos, lista exata no Chatwoot, `Snake to Label` do n8n v16; encerramento automático usa "Falta de Interação" |
 | BI | Consultores | lista única `consultores` (populada em produção a partir do Chatwoot; seed do CSV removido da migration para não duplicar grafias), `consultor_id` em leads e pacientes (backfill por nome a partir de `captadores`, que vira legado) |
+| 12b | Bot volta no próximo ciclo | ao encerrar COM desfecho, `bot_pausado` (Chatwoot) e `transbordado`/`triagem_concluida` (banco) são zerados — o Chatwoot reabre a mesma conversa quando o paciente escreve, então sem isso a Mônica ficava muda para sempre |
 | 12 | Não encerra sem venda/motivo | `conversation_status_changed` → `resolved` sem desfecho ⇒ reabre + nota privada explicando (máx. 3 vezes por conversa). Encerramento automático por inatividade marca "Parou de interagir" antes (n8n v2 e cron do app). Reabrir depois disso devolve o lead para "Atendendo". |
 
 ## 3. O que você precisa fazer (uma vez)

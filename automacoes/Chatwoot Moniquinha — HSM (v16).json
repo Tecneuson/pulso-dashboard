@@ -1068,6 +1068,24 @@
               "name": "status",
               "value": "={{ $json.body.status }}",
               "type": "string"
+            },
+            {
+              "id": "932023e7-3e65-489d-a86c-116ba72acb4a",
+              "name": "attrs_conversa",
+              "value": "={{ $json.body.custom_attributes || {} }}",
+              "type": "object"
+            },
+            {
+              "id": "fea8e580-8651-4aba-bc7c-f3e2df42e052",
+              "name": "venda",
+              "value": "={{ $json.body.custom_attributes ? ($json.body.custom_attributes.venda || \"\") : \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "db1ae16f-f921-4acd-a287-b5a72aa6fbce",
+              "name": "motivo_de_perda",
+              "value": "={{ $json.body.custom_attributes ? ($json.body.custom_attributes.motivo_de_perda || \"\") : \"\" }}",
+              "type": "string"
             }
           ]
         },
@@ -1099,6 +1117,10 @@
           "fieldValues": [
             {
               "fieldId": "transbordado",
+              "fieldValue": "false"
+            },
+            {
+              "fieldId": "triagem_concluida",
               "fieldValue": "false"
             }
           ]
@@ -1595,6 +1617,79 @@
         }
       },
       "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1a808d9-fcc1-4559-a204-966d00c55402",
+              "leftValue": "={{ $('Edit Fields10').item.json.venda === 'Sim' || String($('Edit Fields10').item.json.motivo_de_perda || '').trim().length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3790,
+        5296
+      ],
+      "id": "e6e0618b-7c24-447e-a958-8cc093c4ada0",
+      "name": "Encerrou com desfecho?",
+      "notes": "Só libera o bot quando a conversa foi encerrada COM venda ou motivo de perda. Sem desfecho, o Pulso reabre a conversa (regra 12) e o atendente continua — por isso o bot segue pausado."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot-t7i7rjvs1n1dk406ji1twbjp.187.127.17.157.sslip.io/api/v1/accounts/1/conversations/{{ $('Edit Fields10').item.json.id }}/custom_attributes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ custom_attributes: Object.assign({}, $('Edit Fields10').item.json.attrs_conversa || {}, { bot_pausado: false }) }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4012,
+        5296
+      ],
+      "id": "3eeab7c5-57fb-4fe6-8478-d68d46c11c83",
+      "name": "Reativar bot (novo ciclo)",
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wEsXuLAQb5Nl4xD6",
+          "name": "Header Auth admin"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Limpa bot_pausado: quando o paciente escrever de novo, a Mônica atende o novo ciclo."
     }
   ],
   "pinData": {
@@ -1933,7 +2028,7 @@
       "main": [
         [
           {
-            "node": "No Operation, do nothing28",
+            "node": "Encerrou com desfecho?",
             "type": "main",
             "index": 0
           }
@@ -2121,13 +2216,42 @@
           }
         ]
       ]
+    },
+    "Encerrou com desfecho?": {
+      "main": [
+        [
+          {
+            "node": "Reativar bot (novo ciclo)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing28",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reativar bot (novo ciclo)": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing28",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "ab1fa14d-91ae-4551-9e8a-8a322fe09d1e",
+  "versionId": "0015078c-0265-480e-bcb8-b836f0a54ba6",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "d00a8d656a6ad2be9907f22469b69b0efa9892ad630f6afcdcfe225874e70602"

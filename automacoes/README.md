@@ -23,6 +23,24 @@ conversarem entre si. Versionados aqui porque o n8n não tem histórico próprio
 - **v15** — mapa de `motivo_contato` atualizado para TM/TUS; `toLabel` nunca manda slug cru para campos de lista.
 - **v16** — prompt v16 (menu enxuto, transbordo só ao fim, perfis Lead/Ex-paciente/Responsável/Médico/Consultor); `Snake to Label` com os 30 motivos de perda oficiais; `salvar_triagem` aceita `paciente|responsavel|consultor`; `Snake to Label` traduz as categorias novas (e as antigas, por segurança); o webhook `/chatwoot` passa a filtrar pela conversa (`body.id`) — no v15 usava o id do contato e não achava a linha.
 
+## Quando o bot volta a atender (novo ciclo)
+O Chatwoot **reabre a mesma conversa** quando o paciente escreve depois de encerrada — mesmo id,
+mesmos `custom_attributes`. Por isso existem DUAS travas e as duas precisam ser abertas:
+
+| Trava | Onde | Quem abre |
+|---|---|---|
+| `bot_pausado` | atributo da conversa (Chatwoot) | nó `Reativar bot (novo ciclo)` no fluxo `/chatwoot` |
+| `transbordado` / `triagem_concluida` | `triagem_hsm` (Supabase) | nó `Update a row2` (mesmo fluxo) |
+
+Abrir só a primeira faz o bot responder **uma vez** e se pausar de novo no check
+`Triagem finalizada?`. Abrir só a segunda não adianta: ele nem passa do `Bot pausado?`.
+
+**Condição:** a reativação só acontece quando a conversa é encerrada **com desfecho**
+(`venda = Sim` ou `motivo_de_perda` preenchido). Sem desfecho o Pulso reabre a conversa
+(regra 12) e o atendente continua — por isso o bot segue pausado, de propósito. Isso também
+evita disputa entre o n8n e o app: as duas condições são mutuamente exclusivas.
+Para reativar em QUALQUER encerramento, troque a condição do nó `Encerrou com desfecho?` por `true`.
+
 ## Regras de inatividade (encerramento automático)
 Contato 10 min · Atendendo 30 min · Negociando 30 min · **Rastreio nunca fecha**.
 

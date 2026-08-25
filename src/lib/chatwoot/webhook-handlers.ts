@@ -204,17 +204,35 @@ export async function onStatusChanged(body: AnyObj): Promise<AnyObj> {
           convId,
           '⚠️ Conversa reaberta automaticamente: não é possível encerrar sem marcar **Venda = Sim** ou um **Motivo de perda** nos atributos da conversa. Marque o desfecho e encerre de novo.'
         )
-        await atualizarSeMudou(admin, { id: row.id }, { desfecho_reaberturas: reaberturas + 1, transbordado: false }, row)
+        // Reaberta à força: quem está no comando é o atendente, então o bot PERMANECE
+        // pausado (não mexemos em bot_pausado aqui de propósito).
+        await atualizarSeMudou(admin, { id: row.id }, { desfecho_reaberturas: reaberturas + 1, chatwoot_status: 'open' }, row)
         return { convId, reaberta: true, motivo: 'sem desfecho' }
       } catch (e) {
         console.error('[webhook status] reabrir falhou:', (e as Error).message)
       }
     }
-    // Encerrou com desfecho: garante que o CRM reflete e libera o lead do "transbordado".
-    const patch: AnyObj = { transbordado: false, chatwoot_status: 'resolved' }
+    // Encerrou com desfecho: o ciclo de atendimento acabou.
+    // Zera os DOIS portões do bot para que, se o paciente escrever de novo (o Chatwoot
+    // reabre a MESMA conversa), a Mônica atenda o novo ciclo:
+    //   1) `bot_pausado` (Chatwoot) — senão o bot nem entra;
+    //   2) `transbordado` / `triagem_concluida` (banco) — senão ele responde uma vez e
+    //      se pausa de novo no check "Triagem finalizada?".
+    const patch: AnyObj = {
+      transbordado: false,
+      triagem_concluida: false,
+      chatwoot_status: 'resolved',
+    }
     Object.assign(patch, desfechoFromChatwoot(convAttrs, { estagio_funil: row.estagio_funil, motivo_perda: row.motivo_perda }))
     const fields = await atualizarSeMudou(admin, { id: row.id }, patch, row)
-    return { convId, status, fields }
+    if (convAttrs[KEYS.botPausado] === true) {
+      try {
+        await updateConversationCustomAttributes(convId, { [KEYS.botPausado]: false }, convAttrs)
+      } catch (e) {
+        console.warn('[webhook status] reativar bot falhou:', (e as Error).message)
+      }
+    }
+    return { convId, status, fields, botReativado: convAttrs[KEYS.botPausado] === true }
   }
 
   if (status === 'open') {
