@@ -306,19 +306,13 @@
       "id": "34ff9a25-c00b-42be-bce4-a0071efa21df",
       "name": "HTTP Request6",
       "credentials": {
-        "httpBasicAuth": {
-          "id": "crmyxldTBRWkLoIa",
-          "name": "Chatwoot"
-        },
-        "httpBearerAuth": {
-          "id": "qMLNxZCBToQu9m0e",
-          "name": "Bearer Auth account"
-        },
         "httpHeaderAuth": {
           "id": "PJE1b1MBNfVOY3w3",
           "name": "Header Auth account"
         }
-      }
+      },
+      "notes": "Única chamada que fala COM O PACIENTE (mensagem pública) — usa o token do bot: Header Auth account.",
+      "notesInFlow": true
     },
     {
       "parameters": {
@@ -1004,7 +998,9 @@
     {
       "parameters": {
         "url": "={{ $json.data_url }}",
-        "options": {}
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -1013,7 +1009,14 @@
         4336
       ],
       "id": "fb1c734b-d1ee-4985-9e24-df6f926228f4",
-      "name": "HTTP Request7"
+      "name": "HTTP Request7",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wEsXuLAQb5Nl4xD6",
+          "name": "Header Auth admin"
+        }
+      },
+      "notes": "Baixa o anexo (carteirinha) do próprio Chatwoot — precisa do Header Auth admin quando o storage exige autenticação."
     },
     {
       "parameters": {

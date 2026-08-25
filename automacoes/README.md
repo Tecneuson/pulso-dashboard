@@ -36,7 +36,9 @@ Não obrigatoriamente — ver `docs/SYNC_CHATWOOT.md` §5. Com `N8N_ATIVO=0` o a
 
 ## Ao importar no n8n
 1. Import from File.
-2. **Reconectar as credenciais** (o export não traz os segredos): OpenAI, Supabase, Postgres e os dois headers do Chatwoot — `Header Auth admin` (token de administrador, usado para atributos/atribuição/notas) e `Header Auth account` (token do bot, usado só para enviar mensagem).
+2. **Reconectar as credenciais** (o export não traz os segredos): OpenAI, Supabase, Postgres e os dois headers do Chatwoot.
+
+   **Regra das credenciais HTTP (v16 em diante):** *todo* nó HTTP usa `Header Auth admin` (token de administrador: atributos, atribuição, notas privadas, encerrar conversa, baixar anexo) — **a única exceção é `HTTP Request6`**, que envia a mensagem visível ao paciente e usa `Header Auth account` (token do bot, para a mensagem sair como a Mônica). Cada nó tem exatamente UMA credencial: as credenciais `Chatwoot` (basic) e `Bearer Auth account` que sobravam no `HTTP Request6` foram removidas no v16 — não eram usadas (o nó já autenticava por header) e só confundiam.
 3. Ativar o novo e desativar o antigo.
 
 ## Cuidado conhecido
