@@ -45,6 +45,50 @@ const COLS_LEAD = '*'
 
 const MAX_REABERTURAS = 3
 
+/**
+ * Canais e caixas de entrada que o CRM ignora por completo.
+ *
+ * A caixa de e-mail do comercial recebe tráfego interno (recepção, gestão de leitos,
+ * operadoras respondendo pedido de vaga) que não é lead: sem este filtro cada e-mail
+ * vira um card no funil.
+ *
+ * São dois sinais porque o Chatwoot não é consistente entre eventos:
+ *  - `message_created` traz `conversation.channel = "Channel::Email"`;
+ *  - eventos de conversa NÃO trazem `channel` na raiz — só `meta.channel`.
+ * O `inbox_id` é o único campo presente em todos os formatos, então ele é a rede de
+ * segurança. Fica em env (ids separados por vírgula) para conectar outra caixa sem
+ * precisar de deploy. O mesmo filtro existe no n8n (Switch2 do fluxo da Mônica):
+ * os dois caminhos escrevem no mesmo banco, então os dois precisam da regra.
+ */
+const CANAIS_IGNORADOS = new Set(['Channel::Email'])
+
+function inboxesIgnoradas(): Set<string> {
+  return new Set(
+    (process.env.CHATWOOT_INBOXES_IGNORADAS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  )
+}
+
+/** Canal e caixa do evento, procurando nos vários formatos que o Chatwoot manda. */
+function origemDoEvento(body: AnyObj): { canal: string; inbox: string } {
+  const conversa = (body.conversation ?? body) as AnyObj
+  const meta = conversa.meta as AnyObj | undefined
+  const inbox = body.inbox as AnyObj | undefined
+  const canal = String(conversa.channel ?? meta?.channel ?? body.channel ?? '')
+  const id = inbox?.id ?? conversa.inbox_id ?? body.inbox_id
+  return { canal, inbox: id === null || id === undefined ? '' : String(id) }
+}
+
+/** null = pode processar; objeto = ignorar, com o motivo para o log. */
+function eventoIgnorado(body: AnyObj): { canal: string; inbox: string } | null {
+  const origem = origemDoEvento(body)
+  if (origem.canal && CANAIS_IGNORADOS.has(origem.canal)) return origem
+  if (origem.inbox && inboxesIgnoradas().has(origem.inbox)) return origem
+  return null
+}
+
 function convIdDe(body: AnyObj): string {
   return String(body.id ?? body.display_id ?? '')
 }
@@ -440,6 +484,11 @@ async function criarLeadDoPrimeiroContato(
 /** Roteador de eventos. */
 export async function handleChatwootEvent(body: AnyObj): Promise<AnyObj> {
   const event = String(body.event ?? '')
+
+  // Antes de tudo: e-mail não cria lead nem encosta em card existente.
+  const ignorar = eventoIgnorado(body)
+  if (ignorar) return { ignored: event, ...ignorar }
+
   switch (event) {
     case 'conversation_created':
     case 'conversation_updated':
