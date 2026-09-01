@@ -29,6 +29,13 @@ análise do **modo sem n8n**.
 | 11 | Venda / motivo de perda no Chatwoot ⇄ CRM | `venda = Sim` → Internação; `motivo_de_perda` → Perdido (+motivo). CRM → Chatwoot já existia (`venda` derivado, `motivo_de_perda`) |
 | BI | Relatórios (visão do cliente) | `/reports`: big numbers (contatos, conversas, internações, perdas), motivos de perda (30 oficiais), origens, forma de internação por plano (com motivos), pipeline com churn, perfil, status das conversas (Chatwoot ao vivo + por período), filtros de período e atendente (`src/lib/bi.ts`) |
 | BI | Motivos de perda oficiais | 30 valores do CSV (`MOTIVO_PERDA` em `src/types`), migração dos slugs antigos, lista exata no Chatwoot, `Snake to Label` do n8n v16; encerramento automático usa "Falta de Interação" |
+| UX | Listas grandes | hospitais (≈260) e consultores usam um **Combobox com busca e rolagem** (`src/components/ui/combobox.tsx`) — o `<select>` nativo era impraticável |
+| — | Tempo real no funil | `src/lib/realtime.ts` + migração `20260901`: o Kanban recebe INSERT/UPDATE/DELETE de `triagem_hsm` por Supabase Realtime, então mudanças feitas no Chatwoot, pelo bot ou por outro atendente aparecem sem recarregar. O selinho ao lado da contagem mostra o estado da conexão. |
+| — | Categoria do contato | quem fala pode ser **Paciente**, **Responsável** ou **Consultor** (`CategoriaContatoField`). Responsável e consultor têm ficha própria (nome, telefone, e-mail, CPF) e podem estar vinculados a vários pacientes. O perfil de 5 valores continua sendo o que vai para o BI. |
+| ⚠️ | **Atributos de contato vazam entre pacientes** | no Chatwoot, `data_de_nascimento`, `plano_de_saude`, `motivo_contato_crm`, `estagio_no_funil` e `quem_e_o_contato` são atributos do **contato** (o telefone) — mas descrevem o **paciente**. Com um telefone atendendo vários pacientes, eles se cruzam. Paliativo aplicado: quando o contato tem mais de um card, o webhook **não propaga**. Correção definitiva: mover esses atributos para o nível da CONVERSA no Chatwoot. |
+| — | **Telefone = pessoa, não paciente** | o mesmo número atende vários pacientes (pai com dois filhos, consultor com vários encaminhados). O telefone identifica **quem está falando**; o card certo vem do **CPF do paciente**. Por isso o contato do Chatwoot **não** é renomeado com o nome do paciente — esse nome vai no atributo de conversa `paciente_nome`. |
+| — | **Categoria ≠ Origem** | duas dimensões independentes e que se cruzam livremente: `tipo_contato` (+ `contato_vinculos`) é **quem está falando**; `origem_conversa`/`origem_consultor_id` é **por onde o paciente chegou**, vale o PRIMEIRO contato e não muda depois. Um paciente pode ligar tendo sido encaminhado pelo consultor A e, depois, o consultor B ligar sobre ele — são consultores diferentes em campos diferentes. |
+| — | Consultor duplicado no card | o que duplicava era o `captador` (vínculo legado) sobre o consultor da origem — esse saiu. O consultor **do contato** e o **da origem** continuam separados, por serem coisas diferentes. |
 | BI | Consultores | lista única `consultores` (populada em produção a partir do Chatwoot; seed do CSV removido da migration para não duplicar grafias), `consultor_id` em leads e pacientes (backfill por nome a partir de `captadores`, que vira legado) |
 | 12b | Bot volta no próximo ciclo | ao encerrar COM desfecho, `bot_pausado` (Chatwoot) e `transbordado`/`triagem_concluida` (banco) são zerados — o Chatwoot reabre a mesma conversa quando o paciente escreve, então sem isso a Mônica ficava muda para sempre |
 | 12 | Não encerra sem venda/motivo | `conversation_status_changed` → `resolved` sem desfecho ⇒ reabre + nota privada explicando (máx. 3 vezes por conversa). Encerramento automático por inatividade marca "Parou de interagir" antes (n8n v2 e cron do app). Reabrir depois disso devolve o lead para "Atendendo". |
@@ -46,7 +53,7 @@ análise do **modo sem n8n**.
    - `numero-carteirinha` e `nome_do_responsavel` (já existem no Chatwoot) viram campos personalizados no card automaticamente.
    Depois, "Auditar atributos" mostra o que sobrou (`outras_origem`/`conversa_outras_origem` são legados).
 5. **Backfill** (opcional, recomendado): `npx tsx scripts/backfill-chatwoot.ts --dry` e depois sem `--dry` — reenvia categoria/kids/data etc. dos leads existentes para o Chatwoot.
-6. **n8n**: importar `Chatwoot Moniquinha — HSM (v16).json` (ativar) e desativar o v15; importar `HSM — Automacoes (encerrar + roleta) v2.json` e desativar o v1 — **sem o v2, o encerramento automático briga com a regra 12** (fecha → app reabre).
+6. **n8n**: importar `Chatwoot Moniquinha — HSM (v17).json` (ativar) e desativar o v15/v16; importar `HSM — Automacoes (encerrar) v3.json` e desativar o v1 — **sem ele, o encerramento automático briga com a regra 12** (fecha → app reabre). Ligar a **atribuição automática** na caixa de entrada do Chatwoot (a roleta saiu do n8n e do app).
 7. **Agente de atendimento no card**: preencher `usuarios.chatwoot_agent_id` com o id de cada agente no Chatwoot (ids atuais: Angela 6, Kaylane 7, Larissa 8, Natali 9; admins: Arthur 1, Rafael 4, Marcelo 5, Raquel 10); a atribuição da conversa passa a refletir no lead e no filtro "Atendente" do BI.
 
 ## 4. Eventos e fluxos
@@ -72,8 +79,9 @@ O n8n faz hoje 5 coisas. Todas têm equivalente no app, ligadas por `N8N_ATIVO=0
 |---|---|---|
 | Bot Mônica (IA, tools, memória Postgres, RAG, visão da carteirinha) | `src/lib/bot/monica.ts` (`BOT_ENABLED=1` + `OPENAI_API_KEY`), disparado por `message_created`. Memória = mensagens da própria conversa (API do Chatwoot). RAG usa a mesma função `match_documents`. | **implementado, não testado em produção** — ligar em homologação primeiro |
 | Sync banco → Chatwoot (`/agente-humano`) + pausa do bot + resumo | `/api/sync/triagem` (Database Webhook do Supabase) | implementado |
-| Criar lead no 1º contato + roleta na chegada + pausar bot quando humano responde | `message_created` no webhook (`onMessageCreated`) | implementado |
-| Encerrar inativas + roleta a cada 5 min | `/api/cron/automacoes` (`CRON_SECRET`). Agendar com pg_cron + pg_net no Supabase: | implementado |
+| Criar lead no 1º contato + pausar bot quando humano responde | `message_created` no webhook (`onMessageCreated`) | implementado |
+| ~~Roleta de atendentes~~ | **removida (ago/2026)** — quem distribui é a atribuição automática nativa do Chatwoot | n/a |
+| Encerrar inativas a cada 5 min | `/api/cron/automacoes` (`CRON_SECRET`). Agendar com pg_cron + pg_net no Supabase: | implementado |
 | `/chatwoot` (resolved → transbordado=false) | `onStatusChanged` | implementado (e corrige o bug do v15, que filtrava pelo id do contato) |
 
 Agendamento no Supabase (SQL Editor):
@@ -85,6 +93,27 @@ select cron.schedule('pulso-automacoes', '*/5 * * * *', $$
     headers := '{"Authorization": "Bearer SEU_CRON_SECRET"}'::jsonb, body := '{}'::jsonb);
 $$);
 ```
+
+### Virada "n8n só para o bot" — ordem obrigatória
+
+O v18 remove do n8n a pausa do bot pós-triagem e a reativação ao encerrar. Se ativar o v18
+antes dos passos 1 e 2, **o bot continua respondendo por cima do atendente**. Ordem:
+
+1. **App recebendo os eventos certos.** No webhook do Chatwoot que aponta para
+   `/api/chatwoot/webhook`, marcar TODOS: `conversation_created`, `conversation_updated`,
+   `conversation_status_changed`, `contact_updated`, `message_created`.
+   ⚠️ Ao marcar `conversation_status_changed`, a **regra 12 entra em vigor**: encerrar sem
+   venda/motivo passa a reabrir a conversa. Avise a equipe antes (de preferência fora do pico).
+2. **Database Webhook do Supabase** (`triagem_hsm`, INSERT+UPDATE) → `POST /api/sync/triagem`
+   com header `x-sync-secret`, e definir `SYNC_WEBHOOK_SECRET` no Coolify. Sem isso, a pausa
+   do bot no fim da triagem e a nota de resumo deixam de existir.
+3. **Importar o v18** no n8n (o caminho do webhook é `hsm-receber-mensagens`, igual ao que o
+   Chatwoot já chama), **desativar o v16/v17** — dois workflows ativos com o mesmo caminho
+   dão conflito — e conferir que o bot ainda responde.
+4. **Cron**: definir `CRON_SECRET` e agendar `/api/cron/automacoes`; depois desativar o
+   workflow `HSM — Automacoes (encerrar) v3`.
+5. **Limpeza no Chatwoot**: apagar os webhooks mortos (rota `/api/webhooks/chatwoot`, que não
+   existe, e os do `n8n.cloud`, que está desligado).
 
 **Recomendação de migração**: (1) rodar a migration e o v16/v2 no n8n; (2) apontar o Database Webhook para `/api/sync/triagem` e desligar o fluxo "agente-humano" do n8n; (3) ligar `N8N_ATIVO=0` + cron, mantendo o bot no n8n **ou** ligando `BOT_ENABLED=1` após testar. Custo/risco: o bot é a única peça com LLM; o resto é determinístico e já está coberto.
 

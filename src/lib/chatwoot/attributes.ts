@@ -155,6 +155,8 @@ export const KEYS = {
   hospitalOrigem: 'hospital_origem',
   consultorOrigem: 'consultor_origem',
   botPausado: 'bot_pausado',
+  nomeResponsavel: 'nome_do_responsavel',
+  pacienteNome: 'paciente_nome',
 } as const
 
 export const CORE_DEFINITIONS: AttributeDefinitionSpec[] = [
@@ -192,6 +194,14 @@ export const CORE_DEFINITIONS: AttributeDefinitionSpec[] = [
     descricao: 'TM = transtorno mental · TUS = abuso de substâncias.',
   },
   {
+    key: KEYS.nomeResponsavel,
+    label: 'Nome do responsável',
+    modelo: 'contact',
+    tipo: 'text',
+    descricao:
+      'Preenchido pelo CRM quando o contato é um Responsável (familiar/responsável legal). O nome do PACIENTE fica no nome do contato.',
+  },
+  {
     key: KEYS.dataNascimento,
     label: 'Data de nascimento',
     modelo: 'contact',
@@ -206,6 +216,14 @@ export const CORE_DEFINITIONS: AttributeDefinitionSpec[] = [
     descricao: 'Preenchido automaticamente: paciente entre 8 e 17 anos (unidade infantojuvenil).',
   },
   // ---------------- CONVERSA ----------------
+  {
+    key: KEYS.pacienteNome,
+    label: 'Paciente (desta conversa)',
+    modelo: 'conversation',
+    tipo: 'text',
+    descricao:
+      'Nome de quem será atendido NESTA conversa. Fica na conversa, e não no contato, porque o mesmo telefone fala de vários pacientes.',
+  },
   {
     key: KEYS.assunto,
     label: 'Assunto da conversa',

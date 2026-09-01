@@ -254,7 +254,9 @@ export function contactAttrsFromTriagem(t: Partial<Triagem>): Record<string, unk
     out[DATA_NASCIMENTO_KEY] =
       typeof t.data_nascimento === 'string' && t.data_nascimento ? t.data_nascimento.slice(0, 10) : ''
   }
-  if ('kids' in t) out[KIDS_KEY] = t.kids === true
+  // Só afirma Kids quando há data de nascimento. Mandar `false` sem data diria
+  // "não é criança" quando a verdade é "não sabemos" — e a equipe lê isso.
+  if ('kids' in t && t.kids !== null && t.kids !== undefined) out[KIDS_KEY] = t.kids === true
   return out
 }
 
@@ -272,6 +274,8 @@ export function conversationAttrsFromTriagem(t: Partial<Triagem>): Record<string
     out[VENDA_KEY] = t.estagio_funil === 'internado' ? 'Sim' : 'Não'
   }
   if ('elegivel' in t) out[ELEGIVEL_KEY] = simNao(t.elegivel)
+  // O paciente pertence à CONVERSA: o mesmo telefone atende vários pacientes.
+  if ('contact_name' in t) out[KEYS.pacienteNome] = t.contact_name ?? ''
   return out
 }
 
@@ -294,13 +298,14 @@ export function triagemFromChatwoot(
   }
   // Etapa "Contato" no Chatwoot = sem estágio no banco (o atendente pode voltar o card pra lá).
   if (contactAttrs[KEYS.estagio] === ETAPA_CONTATO_LABEL) out.estagio_funil = null
+  // ⚠️ Vazio no Chatwoot significa "não preenchido lá", NÃO "apague aqui". Um atributo
+  // em branco chegando pelo webhook já zerou a data de nascimento de um card que o bot
+  // tinha preenchido. Só campos da lista `vazioLimpa` (motivo de perda) limpam.
   const dn = contactAttrs[DATA_NASCIMENTO_KEY]
   if (typeof dn === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dn)) out.data_nascimento = dn.slice(0, 10)
-  else if (dn === '' || dn === null) out.data_nascimento = null
   const el = convAttrs[ELEGIVEL_KEY]
   if (el === 'Sim') out.elegivel = true
   else if (el === 'Não') out.elegivel = false
-  else if (el === '') out.elegivel = null
   return out
 }
 

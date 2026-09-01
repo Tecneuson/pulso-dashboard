@@ -1,13 +1,23 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Plus, X } from 'lucide-react'
-import { Select } from '@/components/ui'
-import {
-  ORIGEM_CONVERSA_OPTIONS,
-  ORIGEM_PROFISSIONAL_OPTIONS,
-} from '@/lib/funil-etapas'
+import { Check, X } from 'lucide-react'
+import { Combobox, Select, type ComboboxOption } from '@/components/ui'
+import { ORIGEM_CONVERSA_OPTIONS, ORIGEM_PROFISSIONAL_OPTIONS } from '@/lib/funil-etapas'
 import { useConsultores, useHospitais } from '@/lib/api-store'
+
+/**
+ * Origem da conversa: por onde o paciente chegou.
+ *
+ * ⚠️ ORIGEM ≠ CATEGORIA DO CONTATO. Aqui é **por onde o paciente chegou** — vale o
+ * PRIMEIRO contato e não muda quando outra pessoa liga depois. Quem está falando é
+ * a categoria (`CategoriaContatoField`).
+ *
+ * As duas podem apontar para consultores diferentes: o paciente pode ligar por conta
+ * própria tendo sido encaminhado pelo consultor A, e depois o consultor B ligar sobre
+ * ele. Por isso este campo é independente — o que foi removido antes era o `captador`,
+ * um vínculo legado que duplicava ESTE aqui.
+ */
 
 export interface OrigemValue {
   origem_conversa: string | null
@@ -27,25 +37,11 @@ function withEmpty(opts: { value: string; label: string }[], placeholder = '—'
   return [{ value: '', label: placeholder }, ...opts]
 }
 
-/** Input inline para cadastrar um novo item (consultor/hospital) na hora. */
-function QuickAdd({
-  placeholder,
-  onAdd,
-  onCancel,
-}: {
-  placeholder: string
-  onAdd: (nome: string) => void
-  onCancel: () => void
-}) {
+/** Cadastro rápido de hospital (só o nome — a lista vem do Chatwoot). */
+function NovoHospital({ onAdd, onCancel }: { onAdd: (nome: string) => void; onCancel: () => void }) {
   const [nome, setNome] = useState('')
   const inputCls =
-    'flex-1 h-9 rounded bg-surface-tertiary border border-border text-sm text-content-primary placeholder:text-content-tertiary px-3 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500'
-
-  function confirmar() {
-    const v = nome.trim()
-    if (v) onAdd(v)
-  }
-
+    'flex-1 h-9 rounded bg-surface-tertiary border border-border text-sm text-content-primary placeholder:text-content-tertiary px-3 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500'
   return (
     <div className="flex items-center gap-1.5">
       <input
@@ -55,17 +51,17 @@ function QuickAdd({
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault()
-            confirmar()
+            if (nome.trim()) onAdd(nome.trim())
           }
           if (e.key === 'Escape') onCancel()
         }}
-        placeholder={placeholder}
+        placeholder="Nome do hospital"
         className={inputCls}
       />
       <button
         type="button"
-        onClick={confirmar}
-        className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-md border border-border text-success-600 hover:bg-surface-tertiary transition-colors"
+        onClick={() => nome.trim() && onAdd(nome.trim())}
+        className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-md border border-border text-success-600 hover:bg-surface-tertiary"
         aria-label="Confirmar cadastro"
       >
         <Check size={14} />
@@ -73,7 +69,7 @@ function QuickAdd({
       <button
         type="button"
         onClick={onCancel}
-        className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-md border border-border text-content-tertiary hover:bg-surface-tertiary transition-colors"
+        className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-md border border-border text-content-tertiary hover:bg-surface-tertiary"
         aria-label="Cancelar"
       >
         <X size={14} />
@@ -85,23 +81,21 @@ function QuickAdd({
 export function OrigemFields({
   value,
   onChange,
+  /** Bloqueia a edição quando a origem já foi registrada no primeiro contato. */
+  travada = false,
 }: {
   value: OrigemValue
   onChange: (patch: Partial<OrigemValue>) => void
+  travada?: boolean
 }) {
   const consultores = useConsultores()
   const hospitais = useHospitais()
   const [addingHospital, setAddingHospital] = useState(false)
-  const [addingConsultor, setAddingConsultor] = useState(false)
 
-  const hospitalOpts = hospitais.items
-    .filter((h) => h.ativo)
+  const hospitalOpts: ComboboxOption[] = hospitais.items
+    .filter((h) => h.ativo || h.id === value.origem_hospital_id)
     .map((h) => ({ value: h.id, label: h.nome }))
-  const consultorOpts = consultores.items
-    .filter((c) => c.ativo)
-    .map((c) => ({ value: c.id, label: c.nome }))
 
-  const linkCls = 'text-xs text-brand-500 hover:text-brand-400 transition-colors inline-flex items-center gap-1'
 
   return (
     <div className="space-y-3">
@@ -110,6 +104,7 @@ export function OrigemFields({
         <Select
           options={withEmpty(ORIGEM_CONVERSA_OPTIONS, 'Selecione a origem')}
           value={value.origem_conversa ?? ''}
+          disabled={travada}
           onChange={(e) =>
             onChange({
               origem_conversa: e.target.value || null,
@@ -127,14 +122,17 @@ export function OrigemFields({
           <div className="flex items-center justify-between mb-1">
             <p className="text-overline uppercase text-content-tertiary">Hospital</p>
             {!addingHospital && (
-              <button type="button" className={linkCls} onClick={() => setAddingHospital(true)}>
-                <Plus size={12} /> Cadastrar
+              <button
+                type="button"
+                className="text-xs text-brand-500 hover:text-brand-400"
+                onClick={() => setAddingHospital(true)}
+              >
+                + Cadastrar
               </button>
             )}
           </div>
           {addingHospital ? (
-            <QuickAdd
-              placeholder="Nome do hospital"
+            <NovoHospital
               onCancel={() => setAddingHospital(false)}
               onAdd={async (nome) => {
                 const h = await hospitais.add({ nome })
@@ -143,10 +141,14 @@ export function OrigemFields({
               }}
             />
           ) : (
-            <Select
-              options={withEmpty(hospitalOpts, 'Selecione o hospital')}
-              value={value.origem_hospital_id ?? ''}
-              onChange={(e) => onChange({ origem_hospital_id: e.target.value || null })}
+            <Combobox
+              options={hospitalOpts}
+              value={value.origem_hospital_id}
+              onChange={(id) => onChange({ origem_hospital_id: id })}
+              placeholder="Buscar hospital…"
+              textoVazio="— sem hospital —"
+              onCriar={() => setAddingHospital(true)}
+              criarLabel="Cadastrar hospital"
             />
           )}
         </div>
@@ -154,31 +156,24 @@ export function OrigemFields({
 
       {value.origem_conversa === 'consultor' && (
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-overline uppercase text-content-tertiary">Consultor</p>
-            {!addingConsultor && (
-              <button type="button" className={linkCls} onClick={() => setAddingConsultor(true)}>
-                <Plus size={12} /> Cadastrar
-              </button>
-            )}
-          </div>
-          {addingConsultor ? (
-            <QuickAdd
-              placeholder="Nome do consultor"
-              onCancel={() => setAddingConsultor(false)}
-              onAdd={async (nome) => {
-                const c = await consultores.add({ nome })
-                if (c) onChange({ origem_consultor_id: c.id })
-                setAddingConsultor(false)
-              }}
-            />
-          ) : (
-            <Select
-              options={withEmpty(consultorOpts, 'Selecione o consultor')}
-              value={value.origem_consultor_id ?? ''}
-              onChange={(e) => onChange({ origem_consultor_id: e.target.value || null })}
-            />
-          )}
+          <p className="text-overline uppercase text-content-tertiary mb-1">Consultor que encaminhou</p>
+          <Combobox
+            options={consultores.items
+              .filter((c) => c.ativo || c.id === value.origem_consultor_id)
+              .map((c) => ({
+                value: c.id,
+                label: c.nome,
+                hint: [c.telefones?.[0] ?? c.telefone, c.email].filter(Boolean).join(' · ') || undefined,
+              }))}
+            value={value.origem_consultor_id}
+            onChange={(id) => onChange({ origem_consultor_id: id })}
+            placeholder="Buscar consultor…"
+            textoVazio="— sem consultor —"
+            disabled={travada}
+          />
+          <p className="text-xs text-content-tertiary mt-1">
+            Quem trouxe o paciente. É diferente de quem está falando agora — pode ser outra pessoa.
+          </p>
         </div>
       )}
 

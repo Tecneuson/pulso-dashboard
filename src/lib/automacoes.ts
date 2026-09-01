@@ -1,9 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { MOTIVO_PERDA_INATIVIDADE, MOTIVO_PERDA_LABELS, type EstagioFunil } from '@/types'
 import { etapaFromEstagio, ETAPA_TO_ESTAGIO } from '@/lib/funil-etapas'
-import { limitesInatividade, roletaAtendentes } from '@/lib/env'
+import { limitesInatividade } from '@/lib/env'
 import {
-  assignConversation,
   listConversations,
   toggleConversationStatus,
   updateConversationCustomAttributes,
@@ -13,8 +12,12 @@ import { KEYS } from '@/lib/chatwoot/attributes'
 import { atualizarSeMudou } from '@/lib/triagem-db'
 
 /**
- * Automações que hoje vivem no n8n ("HSM — Automacoes (encerrar + roleta)", a cada 5 min)
- * reimplementadas no app para o modo sem n8n. Acionadas por /api/cron/automacoes.
+ * Automações agendadas (a cada 5 min) para o modo sem n8n. Acionadas por /api/cron/automacoes.
+ *
+ * A distribuição de conversas entre atendentes NÃO mora mais aqui: passou a ser a
+ * **atribuição automática nativa do Chatwoot** (Configurações → Caixas de entrada →
+ * Atribuição automática), que respeita disponibilidade e limite por agente — coisa que
+ * a roleta antiga (round-robin por `id % nº de agentes`) não fazia.
  *
  * Diferença importante em relação ao n8n: antes de encerrar por inatividade o app marca
  * `motivo_de_perda = Falta de Interação` (Chatwoot) e `motivo_perda/estagio` (CRM) —
@@ -85,41 +88,4 @@ export async function encerrarInativas(admin: SupabaseClient): Promise<Resultado
     }
   }
   return r
-}
-
-export interface ResultadoRoleta {
-  semAtendente: number
-  atribuidas: Array<{ conversation_id: string; assignee_id: number }>
-  erros: string[]
-}
-
-/** Distribui conversas abertas sem atendente entre a equipe, em round-robin por ordem de chegada. */
-export async function roleta(): Promise<ResultadoRoleta> {
-  const atendentes = roletaAtendentes()
-  const r: ResultadoRoleta = { semAtendente: 0, atribuidas: [], erros: [] }
-  if (!atendentes.length) {
-    r.erros.push('ROLETA_ATENDENTES vazio — defina os ids dos agentes do Chatwoot (ex.: 6,7,8,9).')
-    return r
-  }
-  const abertas = await todasAbertas()
-  const sem = abertas.filter((c) => !c.meta?.assignee?.id).sort((a, b) => Number(a.id) - Number(b.id))
-  r.semAtendente = sem.length
-  for (let i = 0; i < sem.length; i++) {
-    const c = sem[i]
-    const assignee = atendentes[Number(c.id) % atendentes.length]
-    try {
-      await assignConversation(c.id, assignee)
-      r.atribuidas.push({ conversation_id: String(c.id), assignee_id: assignee })
-    } catch (e) {
-      r.erros.push(`${c.id}: ${(e as Error).message}`)
-    }
-  }
-  return r
-}
-
-/** Atendente da roleta para uma conversa recém-chegada (mesma regra do n8n: id % n). */
-export function atendenteDaRoleta(conversationId: number | string): number | null {
-  const atendentes = roletaAtendentes()
-  if (!atendentes.length) return null
-  return atendentes[Number(conversationId) % atendentes.length]
 }

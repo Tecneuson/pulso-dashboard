@@ -59,6 +59,7 @@ export const triagemPatchSchema = z
     origem_profissional_tipo: enumOuNull(ORIGEM_PROFISSIONAL),
     captador_id: nullableUuid,
     consultor_id: nullableUuid,
+    responsavel_contato_id: nullableUuid,
     atributos,
   })
   .partial()
@@ -86,6 +87,7 @@ export const triagemCreateSchema = z
     origem_profissional_tipo: enumOuNull(ORIGEM_PROFISSIONAL).optional(),
     captador_id: nullableUuid.optional(),
     consultor_id: nullableUuid.optional(),
+    responsavel_contato_id: nullableUuid.optional(),
     atributos: atributos.optional(),
     /** Primeira anotação (vai para o histórico e, se houver conversa, para o Chatwoot). */
     anotacao_inicial: textoLongo.nullable().optional(),
@@ -97,6 +99,50 @@ export type TriagemCreate = z.infer<typeof triagemCreateSchema>
 export const anotacaoCreateSchema = z.object({
   triagem_id: uuid,
   conteudo: textoLongo.min(1),
+})
+
+// ---------------------------------------------------------------------------
+// Pessoas do contato: consultor e responsável (mesma ficha)
+// ---------------------------------------------------------------------------
+const cpfDigitos = z
+  .preprocess(
+    (v) => {
+      if (v == null || v === '') return null
+      const d = String(v).replace(/\D/g, '')
+      return d || null
+    },
+    z.string().regex(/^\d{11}$/, 'CPF deve ter 11 dígitos').nullable()
+  )
+  .optional()
+
+export const pessoaCreateSchema = z.object({
+  nome: z.string().trim().min(2, 'nome muito curto').max(120),
+  telefone: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(40).nullable()).optional(),
+  email: z.preprocess((v) => (v === '' ? null : v), z.string().trim().email().max(200).nullable()).optional(),
+  cpf: cpfDigitos,
+  telefones: z.array(z.string().trim().min(8).max(20)).max(3).optional(),
+  observacoes: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(1000).nullable()).optional(),
+})
+
+export const pessoaPatchSchema = z
+  .object({
+    id: uuid,
+    nome: z.string().trim().min(2).max(120),
+    telefone: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(40).nullable()),
+    email: z.preprocess((v) => (v === '' ? null : v), z.string().trim().email().max(200).nullable()),
+    cpf: cpfDigitos,
+    telefones: z.array(z.string().trim().min(8).max(20)).max(3),
+    observacoes: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(1000).nullable()),
+    ativo: z.boolean(),
+  })
+  .partial()
+  .required({ id: true })
+
+export const vinculoCreateSchema = z.object({
+  triagem_id: uuid,
+  papel: z.enum(['responsavel', 'consultor']),
+  pessoa_id: uuid,
+  observacao: z.string().trim().max(300).nullable().optional(),
 })
 
 export const campoCreateSchema = z.object({

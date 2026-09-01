@@ -50,7 +50,8 @@ import {
   type LeadComEtapa,
 } from '@/lib/funil-etapas'
 import { OrigemFields, type OrigemValue } from './origem-fields'
-import { CaptadorField } from './captador-field'
+import { CategoriaContatoField, type ContatoValue } from './categoria-contato'
+import { ContatosDoCard } from './contatos-card'
 
 interface CardDetailProps {
   triagem: LeadComEtapa | null
@@ -155,7 +156,11 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
   const [editandoNome, setEditandoNome] = useState(false)
   const [nomeEdit, setNomeEdit] = useState('')
   const [numeroPaciente, setNumeroPaciente] = useState('')
-  const [captadorId, setCaptadorId] = useState<string | null>(null)
+  const [contato, setContato] = useState<ContatoValue>({
+    tipo_contato: null,
+    consultor_id: null,
+    responsavel_contato_id: null,
+  })
   const [origem, setOrigem] = useState<OrigemValue>({
     origem_conversa: null,
     origem_hospital_id: null,
@@ -204,7 +209,6 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
       email: triagem.email ?? '',
       data_nascimento: triagem.data_nascimento ?? '',
       elegivel: triagem.elegivel == null ? '' : triagem.elegivel ? 'sim' : 'nao',
-      tipo_contato: triagem.tipo_contato ?? '',
       assunto: triagem.assunto ?? '',
       motivo_contato: triagem.motivo_contato ?? '',
       para_quem: triagem.para_quem ?? '',
@@ -232,7 +236,13 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
     setAcaoErro(null)
     setEditandoNome(false)
     setNomeEdit(triagem.contact_name ?? '')
-    setCaptadorId(triagem.consultor_id ?? triagem.captador_id ?? null)
+    setContato({
+      tipo_contato: triagem.tipo_contato ?? null,
+      // `captador_id` é o vínculo legado do CONTATO (mesma dimensão). NÃO cair para
+      // `origem_consultor_id`: aquilo é a origem — quem encaminhou, não quem falou.
+      consultor_id: triagem.consultor_id ?? triagem.captador_id ?? null,
+      responsavel_contato_id: triagem.responsavel_contato_id ?? null,
+    })
     setNumeroPaciente(
       triagem.numero_paciente ??
         (triagem.paciente?.identificador_cliente != null
@@ -379,14 +389,17 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
       email: form.email.trim() || null,
       data_nascimento: form.data_nascimento || null,
       elegivel: form.elegivel ? form.elegivel === 'sim' : null,
-      tipo_contato: form.tipo_contato || null,
+      tipo_contato: contato.tipo_contato,
+      consultor_id: contato.consultor_id,
+      responsavel_contato_id: contato.responsavel_contato_id,
       assunto: form.assunto || null,
       motivo_contato: form.motivo_contato || null,
       para_quem: form.para_quem || null,
       forma_internacao: form.forma_internacao || null,
       plano_saude: form.plano_saude || null,
-      consultor_id: captadorId,
       atributos,
+      // Origem é dimensão própria: guarda o consultor QUE ENCAMINHOU, que pode ser
+      // outro que não o de `contato.consultor_id` (quem está falando agora).
       ...origem,
     }
     // Só grava estagio_funil se a etapa realmente mudou (preserva a nuance granular).
@@ -761,6 +774,14 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
                     · Paciente #{paciente.identificador_cliente}
                   </span>
                 )}
+                {triagem.contato_principal && (
+                  <span
+                    className="shrink-0 rounded-full bg-surface-tertiary border border-border px-2 py-0.5 text-[11px] font-medium text-content-secondary"
+                    title="Quem falou primeiro sobre este paciente"
+                  >
+                    {triagem.contato_principal}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -1059,9 +1080,15 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
             <Field label="Elegível">
               <Select options={withEmpty(ELEGIVEL_OPTIONS)} value={form.elegivel} onChange={(e) => set('elegivel', e.target.value)} />
             </Field>
-            <Field label="Categoria do contato">
-              <Select options={withEmpty(FIELD_OPTIONS.tipo_contato)} value={form.tipo_contato} onChange={(e) => set('tipo_contato', e.target.value)} />
-            </Field>
+            <div className="rounded-lg border border-border p-3">
+              <CategoriaContatoField
+                value={contato}
+                onChange={(p) => {
+                  setContato((c) => ({ ...c, ...p }))
+                  setStatus('idle')
+                }}
+              />
+            </div>
             <Field label="Assunto">
               <Select options={withEmpty(FIELD_OPTIONS.assunto)} value={form.assunto} onChange={(e) => set('assunto', e.target.value)} />
             </Field>
@@ -1070,8 +1097,15 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
             </Field>
 
             <div className="pt-3 border-t border-border space-y-4">
-              <OrigemFields value={origem} onChange={(p) => { setOrigem((o) => ({ ...o, ...p })); setStatus('idle') }} />
-              <CaptadorField value={captadorId} onChange={(id) => { setCaptadorId(id); setStatus('idle') }} />
+              <OrigemFields
+                value={origem}
+                onChange={(p) => { setOrigem((o) => ({ ...o, ...p })); setStatus('idle') }}
+              />
+              {triagem.origem_conversa && (
+                <p className="text-xs text-content-tertiary -mt-2">
+                  Origem registrada no primeiro contato. Alterar só se tiver sido preenchida errado.
+                </p>
+              )}
             </div>
 
             {camposDef.ativos.length > 0 && (
@@ -1135,6 +1169,8 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
           </div>
 
           <div className="md:pl-6 md:border-l md:border-border space-y-4">
+            <ContatosDoCard triagemId={triagem.id} />
+
             {/* Próximo contato */}
             <div className="rounded-lg border border-border p-4">
               <div className="flex items-center justify-between gap-2">

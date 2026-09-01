@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useSyncExternalStore } from 'react'
-import type { Agendamento, CampoPersonalizado, Captador, Consultor, Hospital } from '@/types'
+import type { Agendamento, CampoPersonalizado, Captador, Consultor, Hospital, Responsavel } from '@/types'
 import { chaveAlvo, situacaoAgendamento, type SituacaoAgendamento } from '@/lib/agendamentos'
 
 /**
@@ -103,6 +103,7 @@ const hospitaisCol = new ApiCollection<Hospital>('/api/hospitais')
 const captadoresCol = new ApiCollection<Captador>('/api/captadores')
 const usuariosCol = new ApiCollection<UsuarioResumo>('/api/usuarios')
 const camposCol = new ApiCollection<CampoPersonalizado>('/api/campos')
+const responsaveisCol = new ApiCollection<Responsavel>('/api/responsaveis')
 /** Só os agendamentos PENDENTES — é o que o card do funil precisa (próximo contato). */
 const agendamentosCol = new ApiCollection<Agendamento>('/api/agendamentos', '?status=pendente')
 
@@ -133,6 +134,26 @@ export function useHospitais() {
     update: hospitaisCol.update,
     remove: hospitaisCol.remove,
     error: hospitaisCol.getError(),
+  }
+}
+
+/**
+ * Responsáveis (familiar/amigo/responsável legal que faz o contato). Mesma ficha
+ * do consultor; um responsável pode aparecer em vários leads.
+ */
+export function useResponsaveis() {
+  const items = useSyncExternalStore(
+    responsaveisCol.subscribe,
+    responsaveisCol.getSnapshot,
+    responsaveisCol.getServerSnapshot
+  )
+  return {
+    items,
+    add: responsaveisCol.add,
+    update: responsaveisCol.update,
+    remove: responsaveisCol.remove,
+    refresh: () => responsaveisCol.load(),
+    error: responsaveisCol.getError(),
   }
 }
 

@@ -4,9 +4,7 @@ import { MOTIVO_PERDA_INATIVIDADE } from '@/types'
 import { isKids } from '@/lib/idade'
 import { assuntosIsentosDesfecho, botAtivo, botNome, exigirDesfecho, n8nAtivo } from '@/lib/env'
 import { ETAPA_TO_ESTAGIO, etapaFromEstagio } from '@/lib/funil-etapas'
-import { atendenteDaRoleta } from '@/lib/automacoes'
 import {
-  assignConversation,
   getContactConversations,
   postPrivateNote,
   toggleConversationStatus,
@@ -23,6 +21,13 @@ import {
 } from './mapping'
 import { ehNotaDoCrm } from './sync'
 import { atualizarSeMudou, inserirComRedeDeSeguranca, lerTriagem, type AnyObj } from '@/lib/triagem-db'
+import {
+  acharCardPorCpf,
+  identificarPessoa,
+  registrarNoHistorico,
+  vincularAoCard,
+  LIMITE_RESPONSAVEIS,
+} from '@/lib/contatos'
 
 /**
  * Chatwoot → CRM. Um handler por evento. Regras de ouro:
@@ -30,8 +35,9 @@ import { atualizarSeMudou, inserirComRedeDeSeguranca, lerTriagem, type AnyObj } 
  *  - escreve no Chatwoot a partir daqui só quando é consequência direta do evento
  *    (reabrir conversa sem desfecho, corrigir estágio após "venda = Sim") — e sempre
  *    de forma idempotente;
- *  - tarefas que o n8n já faz (criar lead no 1º contato, roleta, pausar bot) só rodam
- *    quando N8N_ATIVO=0.
+ *  - tarefas que o n8n já faz (criar lead no 1º contato, pausar bot) só rodam quando
+ *    N8N_ATIVO=0. A distribuição entre atendentes é da atribuição automática nativa
+ *    do Chatwoot — o app nunca atribui conversa.
  */
 
 // '*' de propósito: listar colunas novas quebraria o webhook enquanto a migration não roda.
@@ -167,13 +173,30 @@ export async function onContactUpdated(body: AnyObj): Promise<AnyObj> {
   }
 
   const mudou: string[] = []
-  for (const row of Array.from(alvo.values())) {
+  const leads = Array.from(alvo.values())
+
+  /**
+   * ⚠️ Um telefone atende VÁRIOS pacientes. Quase todo atributo de contato no Chatwoot
+   * (data de nascimento, plano, motivo, estágio) descreve o PACIENTE, não o dono do
+   * telefone — então, quando o contato tem mais de um card, não há como saber a qual
+   * paciente a mudança se refere. Propagar cruzava os dados: marcou os dois cards do
+   * mesmo telefone como "Consultor" e apagou a data de nascimento de um deles.
+   * Com vários cards, gravamos só o que é inequívoco (o id do contato).
+   */
+  const varios = leads.length > 1
+  for (const row of leads) {
     const extra: AnyObj = {}
     if (!row.chatwoot_contact_id) extra.chatwoot_contact_id = contactId
-    if (typeof body.name === 'string' && body.name.trim()) extra.contact_name = body.name.trim()
+    // O nome do contato no Chatwoot é o DONO DO TELEFONE; `contact_name` no CRM é o
+    // PACIENTE. Nunca copiar um no outro (foi assim que "Miguel dos Anjos" virou o
+    // nome do card do Pablo).
+    if (varios) {
+      mudou.push(...(await atualizarSeMudou(admin, { id: row.id }, extra, row)))
+      continue
+    }
     mudou.push(...(await aplicarAtributos(admin, row, contactAttrs, {}, extra, contactId)))
   }
-  return { contactId, leads: alvo.size, fields: Array.from(new Set(mudou)) }
+  return { contactId, leads: leads.length, propagado: !varios, fields: Array.from(new Set(mudou)) }
 }
 
 // ------------------------------------------------------------
@@ -263,7 +286,7 @@ export async function onStatusChanged(body: AnyObj): Promise<AnyObj> {
 }
 
 // ------------------------------------------------------------
-// message_created — notas privadas ⇄ histórico, 1º contato, roleta, pausa do bot, bot
+// message_created — notas privadas ⇄ histórico, 1º contato, pausa do bot, bot
 // ------------------------------------------------------------
 export async function onMessageCreated(body: AnyObj): Promise<AnyObj> {
   const admin = createAdminClient()
@@ -301,23 +324,20 @@ export async function onMessageCreated(body: AnyObj): Promise<AnyObj> {
   // 2) Mensagem do contato.
   if (tipo === 'incoming') {
     const out: AnyObj = { convId, incoming: true }
-    if (n8nAtivo()) return { ...out, skipped: 'n8n ativo cuida do 1º contato/roleta/bot' }
-
     let row = await lerTriagem(admin, { conversation_id: convId }, COLS_LEAD)
+
+    // Reconhecer quem está falando e vincular ao card é trabalho do CRM, não do bot:
+    // roda SEMPRE, inclusive com o n8n no ar. (Antes ficava depois do return abaixo e
+    // nunca era executado na configuração real.)
+    if (row) Object.assign(out, await reconhecerContato(admin, row, conversation.meta?.sender ?? sender))
+
+    // Daqui para baixo é papel do bot — com o n8n ativo, é ele quem faz.
+    if (n8nAtivo()) return { ...out, skipped: 'n8n ativo cuida do 1º contato/bot' }
+
     if (!row) {
       row = await criarLeadDoPrimeiroContato(admin, convId, conversation.meta?.sender ?? sender, conversation.meta?.assignee)
       out.leadCriado = !!row
-    }
-    if (!conversation.meta?.assignee?.id) {
-      const agente = atendenteDaRoleta(convId)
-      if (agente) {
-        try {
-          await assignConversation(convId, agente)
-          out.roleta = agente
-        } catch (e) {
-          out.roletaErro = (e as Error).message
-        }
-      }
+      if (row) Object.assign(out, await reconhecerContato(admin, row, conversation.meta?.sender ?? sender))
     }
     const pausado = conversation.custom_attributes?.[KEYS.botPausado] === true
     if (botAtivo() && !pausado && row) {
@@ -339,6 +359,55 @@ export async function onMessageCreated(body: AnyObj): Promise<AnyObj> {
     }
   }
   return { convId, ignored: tipo }
+}
+
+/**
+ * Reconhece quem está falando e liga ao card certo.
+ *
+ * Regra combinada com o cliente: a pessoa é identificada pelo telefone do WhatsApp
+ * (consultor cadastrado vence; qualquer outro número vira responsável, criado na
+ * hora com o nome do WhatsApp). Em seguida procuramos o paciente pelo CPF: se já
+ * existe card, o contato é vinculado a ELE — é o caso da esposa falando do mesmo
+ * filho. Passando de 4 responsáveis, o contato só entra no histórico.
+ */
+async function reconhecerContato(admin: SupabaseClient, row: AnyObj, sender: AnyObj): Promise<AnyObj> {
+  const out: AnyObj = {}
+  try {
+    const pessoa = await identificarPessoa(admin, sender?.phone_number, sender?.name)
+    if (!pessoa) return out
+    out.contato = { papel: pessoa.papel, nome: pessoa.nome, novo: pessoa.novo }
+
+    // Qual card recebe o vínculo? Quem manda é o CPF do paciente DESTA conversa —
+    // nunca o telefone. A mesma pessoa pode falar de vários pacientes, e cada um tem
+    // o seu card. Sem CPF, fica no card da própria conversa.
+    const cardDoPaciente = (await acharCardPorCpf(admin, row.cpf)) ?? row
+    if (cardDoPaciente.id !== row.id) out.cardDoPaciente = cardDoPaciente.id
+
+    const r = await vincularAoCard(admin, cardDoPaciente.id, pessoa)
+    out.vinculo = r.status
+
+    if (r.status === 'vinculado') {
+      await registrarNoHistorico(
+        admin,
+        cardDoPaciente.id,
+        `👤 ${pessoa.papel === 'consultor' ? 'Consultor' : 'Responsável'} entrou em contato: ${pessoa.nome}` +
+          (pessoa.novo ? ' (cadastro criado pelo WhatsApp)' : ''),
+        pessoa.nome
+      )
+    } else if (r.status === 'limite') {
+      // O cliente pediu: a partir do 5º, não vira vínculo — fica registrado.
+      await registrarNoHistorico(
+        admin,
+        cardDoPaciente.id,
+        `👤 ${pessoa.nome} entrou em contato sobre este paciente, mas o card já tem ` +
+          `${LIMITE_RESPONSAVEIS} responsáveis vinculados — não foi vinculado.`,
+        pessoa.nome
+      )
+    }
+  } catch (e) {
+    out.contatoErro = (e as Error).message
+  }
+  return out
 }
 
 /** Lead no 1º contato (modo sem n8n). UNIQUE(conversation_id) evita duplicar. */

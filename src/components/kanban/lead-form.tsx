@@ -10,13 +10,16 @@ import { useCampos } from '@/lib/api-store'
 import { idadeEm, isKids } from '@/lib/idade'
 import type { TriagemLead } from '@/types'
 import { OrigemFields, ORIGEM_VAZIA, type OrigemValue } from './origem-fields'
-import { CaptadorField } from './captador-field'
+import { CategoriaContatoField, type ContatoValue } from './categoria-contato'
 import { CamposDinamicos } from './campos-dinamicos'
 
 /**
  * "Adicionar contato": tem TODOS os campos que existem no Chatwoot (core + personalizados).
  * Ao salvar, o lead entra em "Contato" e é espelhado como contato no Chatwoot (com os
  * atributos), mesmo sem conversa. A primeira anotação vai para o histórico.
+ *
+ * A categoria de quem está falando (Paciente / Responsável / Consultor) é escolhida aqui:
+ * nem todo contato é o próprio paciente.
  */
 
 function withEmpty(opts?: { value: string; label: string }[]) {
@@ -38,7 +41,6 @@ const EMPTY = {
   phone: '',
   email: '',
   data_nascimento: '',
-  tipo_contato: '',
   para_quem: '',
   assunto: '',
   motivo_contato: '',
@@ -46,6 +48,12 @@ const EMPTY = {
   plano_saude: '',
   elegivel: '',
   anotacao_inicial: '',
+}
+
+const CONTATO_VAZIO: ContatoValue = {
+  tipo_contato: null,
+  consultor_id: null,
+  responsavel_contato_id: null,
 }
 
 interface LeadFormProps {
@@ -56,8 +64,8 @@ interface LeadFormProps {
 
 export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
   const [form, setForm] = useState({ ...EMPTY })
+  const [contato, setContato] = useState<ContatoValue>({ ...CONTATO_VAZIO })
   const [origem, setOrigem] = useState<OrigemValue>({ ...ORIGEM_VAZIA })
-  const [captadorId, setCaptadorId] = useState<string | null>(null)
   const [atributos, setAtributos] = useState<Record<string, unknown>>({})
   const [erro, setErro] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -69,8 +77,8 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
 
   function reset() {
     setForm({ ...EMPTY })
+    setContato({ ...CONTATO_VAZIO })
     setOrigem({ ...ORIGEM_VAZIA })
-    setCaptadorId(null)
     setAtributos({})
     setErro(null)
   }
@@ -82,7 +90,7 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
 
   async function salvar() {
     if (!form.contact_name.trim()) {
-      setErro('Informe o nome do contato.')
+      setErro('Informe o nome do paciente.')
       return
     }
     setSaving(true)
@@ -96,7 +104,9 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
           phone: form.phone.trim() || null,
           email: form.email.trim() || null,
           data_nascimento: form.data_nascimento || null,
-          tipo_contato: form.tipo_contato || null,
+          tipo_contato: contato.tipo_contato,
+          consultor_id: contato.consultor_id,
+          responsavel_contato_id: contato.responsavel_contato_id,
           para_quem: form.para_quem || null,
           assunto: form.assunto || null,
           motivo_contato: form.motivo_contato || null,
@@ -105,9 +115,9 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
           elegivel: form.elegivel ? form.elegivel === 'sim' : null,
           origem_conversa: origem.origem_conversa,
           origem_hospital_id: origem.origem_hospital_id,
+          // Dimensão própria: o consultor que ENCAMINHOU, que pode não ser quem ligou.
           origem_consultor_id: origem.origem_consultor_id,
           origem_profissional_tipo: origem.origem_profissional_tipo,
-          consultor_id: captadorId,
           atributos,
           anotacao_inicial: form.anotacao_inicial.trim() || null,
         }),
@@ -137,6 +147,14 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
           Cria o lead na coluna <strong>Contato</strong> e espelha no Chatwoot como contato (com
           todos os campos) — sem abrir conversa. Telefone ou e-mail é necessário para o espelho.
         </p>
+
+        {/* Quem está falando: paciente, responsável ou consultor */}
+        <div className="rounded-lg border border-border p-3">
+          <CategoriaContatoField
+            value={contato}
+            onChange={(p) => setContato((c) => ({ ...c, ...p }))}
+          />
+        </div>
 
         <Input
           label="Nome do paciente *"
@@ -175,10 +193,10 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
             )}
           </div>
           <Select
-            label="Categoria do contato"
-            options={withEmpty(FIELD_OPTIONS.tipo_contato)}
-            value={form.tipo_contato}
-            onChange={(e) => set('tipo_contato', e.target.value)}
+            label="Para quem"
+            options={withEmpty(FIELD_OPTIONS.para_quem)}
+            value={form.para_quem}
+            onChange={(e) => set('para_quem', e.target.value)}
           />
         </div>
 
@@ -199,21 +217,6 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
 
         <div className="grid grid-cols-2 gap-3">
           <Select
-            label="Para quem"
-            options={withEmpty(FIELD_OPTIONS.para_quem)}
-            value={form.para_quem}
-            onChange={(e) => set('para_quem', e.target.value)}
-          />
-          <Select
-            label="Elegível"
-            options={withEmpty(ELEGIVEL_OPTIONS)}
-            value={form.elegivel}
-            onChange={(e) => set('elegivel', e.target.value)}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Select
             label="Forma de internação"
             options={withEmpty(FORMA_OPTIONS)}
             value={form.forma_internacao}
@@ -227,9 +230,18 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
           />
         </div>
 
-        <div className="pt-3 border-t border-border space-y-4">
-          <OrigemFields value={origem} onChange={(patch) => setOrigem((o) => ({ ...o, ...patch }))} />
-          <CaptadorField value={captadorId} onChange={setCaptadorId} />
+        <Select
+          label="Elegível"
+          options={withEmpty(ELEGIVEL_OPTIONS)}
+          value={form.elegivel}
+          onChange={(e) => set('elegivel', e.target.value)}
+        />
+
+        <div className="pt-3 border-t border-border">
+          <OrigemFields
+            value={origem}
+            onChange={(patch) => setOrigem((o) => ({ ...o, ...patch }))}
+          />
         </div>
 
         {campos.ativos.length > 0 && (

@@ -10,12 +10,12 @@ import {
   searchContacts,
   setConversationLabels,
   telefoneE164,
-  updateContact,
   updateContactCustomAttributes,
   updateConversationCustomAttributes,
   type ChatwootConversation,
 } from './client'
 import { listarCampos } from './campos'
+import { KEYS } from './attributes'
 import {
   chatwootAttrsFromAtributos,
   contactAttrsFromTriagem,
@@ -57,15 +57,32 @@ async function atributosDeOrigem(supabase: SupabaseClient, row: AnyObj, patch: A
     }
     out[HOSPITAL_ORIGEM_KEY] = nome
   }
+  // `consultor_origem` no Chatwoot é a ORIGEM (quem encaminhou) — não quem está
+  // falando agora. São dimensões diferentes: não caia na tentação de usar consultor_id.
   if ('origem_consultor_id' in patch || 'origem_conversa' in patch) {
+    const id = row.origem_consultor_id
     let nome = ''
-    if (row.origem_consultor_id) {
-      const { data } = await supabase.from('consultores').select('nome').eq('id', row.origem_consultor_id).maybeSingle()
+    if (id) {
+      const { data } = await supabase.from('consultores').select('nome').eq('id', id).maybeSingle()
       nome = (data?.nome as string) ?? ''
     }
     out[CONSULTOR_ORIGEM_KEY] = nome
   }
   return out
+}
+
+/** Nome do responsável → atributo do CONTATO (o Chatwoot já tem esse campo). */
+async function atributoResponsavel(supabase: SupabaseClient, row: AnyObj): Promise<AnyObj> {
+  let nome = ''
+  if (row.responsavel_contato_id) {
+    const { data } = await supabase
+      .from('responsaveis')
+      .select('nome')
+      .eq('id', row.responsavel_contato_id)
+      .maybeSingle()
+    nome = (data?.nome as string) ?? ''
+  }
+  return { [KEYS.nomeResponsavel]: nome }
 }
 
 /**
@@ -94,6 +111,9 @@ export async function pushTriagemParaChatwoot(
     if ('data_nascimento' in p && !('kids' in p)) p.kids = isKids(p.data_nascimento)
 
     const contactAttrs: AnyObj = { ...contactAttrsFromTriagem(p), ...dinamicos.contact }
+    if ('responsavel_contato_id' in patch) {
+      Object.assign(contactAttrs, await atributoResponsavel(supabase, row))
+    }
     const convAttrs: AnyObj = { ...conversationAttrsFromTriagem(p), ...dinamicos.conversation }
 
     let conv: ChatwootConversation | null = opts.conv ?? null
@@ -109,9 +129,11 @@ export async function pushTriagemParaChatwoot(
       if (Object.keys(contactAttrs).length) {
         await updateContactCustomAttributes(contactId, contactAttrs, contatoAttrsAtuais)
       }
-      if ('contact_name' in patch && typeof patch.contact_name === 'string' && patch.contact_name.trim()) {
-        await updateContact(contactId, { name: patch.contact_name.trim() })
-      }
+      // ⚠️ NÃO renomear o contato do Chatwoot com o nome do paciente.
+      // O contato é a PESSOA DONA DO TELEFONE (o pai, o consultor), e o mesmo número
+      // fala de vários pacientes. Renomear apagava o nome de quem liga e, na conversa
+      // seguinte sobre outro paciente, o cadastro vinha errado. O nome do paciente vai
+      // como atributo DA CONVERSA (`paciente_nome`), que é o nível certo.
     }
     if (convId) {
       if (Object.keys(convAttrs).length) {

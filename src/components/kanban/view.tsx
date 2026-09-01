@@ -11,6 +11,8 @@ import { FunilDadosProvider } from './funil-dados'
 import { Button } from '@/components/ui'
 import type { TriagemLead } from '@/types'
 import { useAgendamentosPendentes } from '@/lib/api-store'
+import { useTriagensRealtime } from '@/lib/realtime'
+import { StatusRealtimeBadge } from './status-realtime'
 import { comEtapa, ETAPA_TO_ESTAGIO, type FunilEtapa } from '@/lib/funil-etapas'
 import {
   FILTROS_INICIAL,
@@ -34,6 +36,10 @@ export function KanbanView({ triagens }: KanbanViewProps) {
   const [qDebounced, setQDebounced] = useState('')
 
   const agendamentos = useAgendamentosPendentes()
+
+  // Tempo real: mudanças em `triagem_hsm` (Chatwoot, bot, outro atendente) entram
+  // direto no board, sem recarregar a página.
+  const realtime = useTriagensRealtime(setItems)
 
   // Re-sincroniza quando o servidor traz novos dados (revalidate).
   useEffect(() => {
@@ -122,6 +128,12 @@ export function KanbanView({ triagens }: KanbanViewProps) {
             filtrados={leadsFiltrados.length}
             filtros={filtros}
             onChange={setFiltros}
+            statusRealtime={
+              <StatusRealtimeBadge
+                status={realtime.status}
+                ultimaAtualizacao={realtime.ultimaAtualizacao}
+              />
+            }
           />
         </div>
 

@@ -25,6 +25,8 @@ interface FiltrosProps {
   filtrados: number
   filtros: FiltrosState
   onChange: (f: FiltrosState) => void
+  /** Selinho de tempo real, exibido junto da contagem de leads. */
+  statusRealtime?: React.ReactNode
 }
 
 const DIM_LABEL: Record<string, string> = {
@@ -280,7 +282,7 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
 // Componente principal
 // ------------------------------------------------------------
 
-export function Filtros({ leads, filtrados, filtros, onChange }: FiltrosProps) {
+export function Filtros({ leads, filtrados, filtros, onChange, statusRealtime }: FiltrosProps) {
   const [aberto, setAberto] = useState(false)
 
   const consultores = useConsultores()
@@ -426,7 +428,10 @@ export function Filtros({ leads, filtrados, filtros, onChange }: FiltrosProps) {
         </div>
 
         <div className="shrink-0 flex flex-col items-end gap-1">
-          <span className="text-caption">{contagem}</span>
+          <span className="inline-flex items-center gap-2 text-caption">
+            {statusRealtime}
+            {contagem}
+          </span>
           <Button variant="secondary" size="sm" onClick={() => setAberto(true)}>
             <SlidersHorizontal size={14} />
             Filtros

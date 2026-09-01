@@ -9,7 +9,7 @@ export function isProd(): boolean {
 
 /**
  * Enquanto o n8n estiver ativo (padrão), o app NÃO executa as tarefas que o n8n já
- * faz (criar lead no 1º contato, roleta, pausar bot, encerrar inativas, bot Mônica)
+ * faz (criar lead no 1º contato, pausar bot, encerrar inativas, bot Mônica)
  * — senão os dois disputam. `N8N_ATIVO=0` liga o "modo sem n8n".
  */
 export function n8nAtivo(): boolean {
@@ -32,14 +32,6 @@ export function assuntosIsentosDesfecho(): string[] {
 /** Nome do usuário do bot no Chatwoot (mensagens dele não pausam o bot). */
 export function botNome(): string {
   return process.env.CHATWOOT_BOT_NAME || 'Moniquinha'
-}
-
-/** Ids dos agentes da roleta (Chatwoot user ids), ex.: "6,7,8,9". */
-export function roletaAtendentes(): number[] {
-  return (process.env.ROLETA_ATENDENTES ?? '')
-    .split(',')
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isInteger(n) && n > 0)
 }
 
 /** Bot Mônica dentro do app (modo sem n8n). Exige BOT_ENABLED=1 e OPENAI_API_KEY. */

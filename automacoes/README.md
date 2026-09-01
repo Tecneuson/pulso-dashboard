@@ -7,12 +7,12 @@ conversarem entre si. Versionados aqui porque o n8n não tem histórico próprio
 
 | Arquivo | O que é |
 |---|---|
-| `Chatwoot Moniquinha — HSM (v16).json` | **VERSÃO A ATIVAR.** Prompt v16 (sem "outros assuntos/remoção/falar com atendente" no menu; categorias Paciente/Responsável/Consultor) + correção do webhook `/chatwoot`. Gerado a partir do v15 + `prompt-monica-v16.md`. |
-| `prompt-monica-v16.md` | Fonte única do prompt da Mônica (o mesmo texto vai para `src/lib/bot/prompt-monica.json`, usado pelo bot interno do app). |
+| `Chatwoot Moniquinha — HSM (v20) — FINAL.json` | **VERSÃO A COLAR.** O n8n fica com o bot e com o CICLO DE VIDA dele (pausar no fim da triagem, reativar ao encerrar). Sai a escrita de atributos no Chatwoot — isso é do Pulso agora. Caminhos: `hsm-receber-mensagens`, `hsm-agente-humano`, `hsm-chatwoot`. |
+| `prompt-monica-v17.md` | Fonte única do prompt da Mônica (o mesmo texto vai para `src/lib/bot/prompt-monica.json`, usado pelo bot interno do app). |
 | `Chatwoot Moniquinha — HSM (v15).json` | Versão em produção até a troca. |
 | `Chatwoot Moniquinha — HSM (v11..v14).json` | Histórico das correções (ver abaixo). |
-| `HSM — Automacoes (encerrar + roleta) v2.json` | **VERSÃO A ATIVAR.** Igual à v1, mas marca `motivo_de_perda = Falta de Interação` + `venda = Não` ANTES de encerrar — exigência da regra "não encerra sem desfecho" do Pulso. |
-| `HSM — Automacoes (encerrar + roleta).json` | v1 (desativar ao ativar a v2). |
+| `HSM — Automacoes (encerrar) v3.json` | **DESATIVAR** quando o cron do Pulso (`/api/cron/automacoes`) estiver no ar — os dois fazem a mesma coisa. Mantido como plano B. |
+| `HSM — Automacoes (encerrar + roleta).json` | v1 (desativar ao ativar a v3). |
 | `Chatwoot MCP Server — HSM (v10).json` | Versão anterior do bot, antes da reescrita. |
 
 ### Evolução das correções
@@ -41,6 +41,23 @@ Abrir só a primeira faz o bot responder **uma vez** e se pausar de novo no chec
 evita disputa entre o n8n e o app: as duas condições são mutuamente exclusivas.
 Para reativar em QUALQUER encerramento, troque a condição do nó `Encerrou com desfecho?` por `true`.
 
+## Divisão de responsabilidades (a partir do v18)
+
+| Responsabilidade | Onde roda |
+|---|---|
+| Conversar com o paciente, triagem, carteirinha, base de conhecimento | **n8n** (bot Mônica) |
+| Gravar a triagem no banco (`salvar_triagem`) | **n8n** (tool do bot) |
+| **Ciclo de vida do bot**: pausar no fim da triagem, nota de resumo, reativar ao encerrar | **n8n** — é do bot, fica com quem hospeda o bot |
+| Banco → Chatwoot (atributos: estágio, plano, perfil, data de nascimento, kids…) | **Pulso** — `/api/sync/triagem` |
+| Chatwoot → banco (atributos, desfecho, notas, status) | **Pulso** — `/api/chatwoot/webhook` |
+| Regra 12 (não encerrar sem venda/motivo) e reativação do bot | **Pulso** |
+| Encerrar por inatividade | **Pulso** — `/api/cron/automacoes` |
+| Distribuir conversas | **Chatwoot** (atribuição automática nativa) |
+
+## Distribuição de conversas
+**Não é mais feita aqui.** Use a atribuição automática nativa do Chatwoot. Nem o n8n nem o
+Pulso atribuem conversas — se atribuíssem, brigariam com o Chatwoot pela mesma conversa.
+
 ## Regras de inatividade (encerramento automático)
 Contato 10 min · Atendendo 30 min · Negociando 30 min · **Rastreio nunca fecha**.
 
@@ -58,6 +75,11 @@ Não obrigatoriamente — ver `docs/SYNC_CHATWOOT.md` §5. Com `N8N_ATIVO=0` o a
 
    **Regra das credenciais HTTP (v16 em diante):** *todo* nó HTTP usa `Header Auth admin` (token de administrador: atributos, atribuição, notas privadas, encerrar conversa, baixar anexo) — **a única exceção é `HTTP Request6`**, que envia a mensagem visível ao paciente e usa `Header Auth account` (token do bot, para a mensagem sair como a Mônica). Cada nó tem exatamente UMA credencial: as credenciais `Chatwoot` (basic) e `Bearer Auth account` que sobravam no `HTTP Request6` foram removidas no v16 — não eram usadas (o nó já autenticava por header) e só confundiam.
 3. Ativar o novo e desativar o antigo.
+
+## Campo `nome_do_responsavel`
+Existe no Chatwoot e agora é preenchido pelo CRM quando a categoria do contato é
+**Responsável**. O nome do PACIENTE continua sendo o nome do contato — o responsável é
+quem ligou. A Mônica não preenche esse campo (ela só marca `tipo_contato`).
 
 ## Cuidado conhecido
 O endpoint de `custom_attributes` do Chatwoot **substitui** o objeto inteiro — sempre mesclar com os atributos atuais antes de gravar.

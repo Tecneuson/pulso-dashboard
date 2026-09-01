@@ -8,7 +8,7 @@ import { formatarCpf } from '@/lib/cpf'
 import { Modal } from '@/components/ui/modal'
 import { Badge } from '@/components/ui/badge'
 import { classificacaoMeta, internacoesConhecidas, formatDateBR } from '@/lib/funil'
-import { CaptadorField } from '../captador-field'
+import { ConsultorField } from '../consultor-field'
 import { REATIVACAO_VARIANT } from './stage-meta'
 
 interface PacienteDetailProps {
@@ -149,7 +149,7 @@ export function PacienteDetail({ paciente, open, onClose }: PacienteDetailProps)
 
             {/* Consultor — único campo editável do paciente (salva na hora) */}
             <div>
-              <CaptadorField value={captadorId} onChange={salvarCaptador} />
+              <ConsultorField value={captadorId} onChange={salvarCaptador} />
               {savingCaptador && (
                 <p className="text-xs text-content-tertiary mt-1 flex items-center gap-1">
                   <Loader2 size={11} className="animate-spin" /> salvando…

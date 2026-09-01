@@ -160,12 +160,9 @@ export async function toggleConversationStatus(
   })
 }
 
-export async function assignConversation(conversationId: string | number, assigneeId: number): Promise<void> {
-  await cw(`/conversations/${conversationId}/assignments`, {
-    method: 'POST',
-    body: JSON.stringify({ assignee_id: assigneeId }),
-  })
-}
+// Atribuição de conversa: de propósito NÃO existe helper aqui. Quem distribui é a
+// atribuição automática nativa do Chatwoot; se o app também atribuísse, os dois
+// brigariam pela mesma conversa.
 
 /** Lista as conversas de um contato (usado no webhook contact_updated). */
 export async function getContactConversations(

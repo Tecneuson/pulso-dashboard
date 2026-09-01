@@ -26,6 +26,13 @@ export const CATEGORIA_CONTATO_LABELS: Record<CategoriaContato, string> = {
   consultor: 'Consultor',
 }
 
+/** Perfis (5) que compõem cada categoria (3) — usado pelo seletor do card. */
+export const PERFIS_POR_CATEGORIA: Record<CategoriaContato, TipoContato[]> = {
+  paciente: ['lead', 'ex_paciente'],
+  responsavel: ['responsavel'],
+  consultor: ['consultor', 'medico'],
+}
+
 /** Categoria (3) derivada do perfil (5). */
 export function categoriaDoTipo(tipo: string | null | undefined): CategoriaContato | null {
   switch (tipo) {
@@ -309,6 +316,11 @@ export interface Triagem {
   captador_id: string | null
   /** Consultor responsável pelo lead (tabela `consultores`, lista unificada). */
   consultor_id: string | null
+  /**
+   * LEGADO — o vínculo virou N:N em `contato_vinculos`. Mantido porque o Chatwoot
+   * recebe o nome do responsável principal no atributo `nome_do_responsavel`.
+   */
+  responsavel_contato_id: string | null
   /** Status da conversa no Chatwoot (open | pending | snoozed | resolved), atualizado pelo webhook. */
   chatwoot_status: string | null
   utm_source: string | null
@@ -406,21 +418,52 @@ export const PACIENTE_RESUMO_FIELDS =
 /** Lead do funil unificado: triagem + paciente conciliado (quando houver). */
 export type TriagemLead = Triagem & {
   paciente?: PacienteResumo | null
+  /** Nome de quem falou primeiro (responsável ou consultor) — tag ao lado do paciente. */
+  contato_principal?: string | null
 }
 
 // ============================================================
 // Cadastros visuais (localStorage) — não existem no banco
 // ============================================================
 
-/** Consultor: intermediário entre a família do paciente e o hospital. */
+/**
+ * Consultor: intermediário entre a família do paciente e o hospital.
+ * Um consultor pode estar vinculado a VÁRIOS leads/pacientes (o vínculo mora
+ * no lead, em `triagem_hsm.consultor_id`).
+ */
 export interface Consultor {
   id: string
   nome: string
+  /** Primeiro WhatsApp — mantido por compatibilidade; a lista real é `telefones`. */
   telefone?: string | null
+  /** WhatsApps (só dígitos). O formulário aceita até 3. */
+  telefones?: string[] | null
   email?: string | null
+  /** CPF normalizado (11 dígitos). */
+  cpf?: string | null
   observacoes?: string | null
   ativo: boolean
   created_at: string
+  /** Quantos leads estão vinculados a este consultor (calculado pela API). */
+  vinculos?: number
+}
+
+/**
+ * Responsável pelo paciente (familiar, amigo ou responsável legal) que faz o
+ * contato. Mesmo cadastro do consultor; também pode atender a vários pacientes.
+ */
+export interface Responsavel {
+  id: string
+  nome: string
+  telefone?: string | null
+  /** WhatsApps (só dígitos) — é por eles que reconhecemos quem está falando. */
+  telefones?: string[] | null
+  email?: string | null
+  cpf?: string | null
+  observacoes?: string | null
+  ativo: boolean
+  created_at: string
+  vinculos?: number
 }
 
 /** Hospital parceiro (origem "Interhospitalar"). */
@@ -442,6 +485,42 @@ export interface Captador {
   observacoes?: string | null
   ativo: boolean
   created_at: string
+}
+
+// ============================================================
+// Contatos do card — quem já falou com o hospital sobre este paciente
+// ============================================================
+
+export const PAPEL_CONTATO = ['responsavel', 'consultor'] as const
+export type PapelContato = (typeof PAPEL_CONTATO)[number]
+
+export const PAPEL_CONTATO_LABELS: Record<PapelContato, string> = {
+  responsavel: 'Responsável',
+  consultor: 'Consultor',
+}
+
+/** Quantos responsáveis cabem num card. O 5º entra só como evento do histórico. */
+export const LIMITE_RESPONSAVEIS = 4
+
+/**
+ * Vínculo entre o card e uma pessoa (N:N). O mesmo responsável ou consultor pode
+ * estar em vários cards, e um card acumula os contatos que falaram sobre o paciente.
+ */
+export interface ContatoVinculo {
+  id: string
+  triagem_id: string
+  papel: PapelContato
+  responsavel_id: string | null
+  consultor_id: string | null
+  /** Quem falou primeiro sobre este paciente. */
+  principal: boolean
+  observacao: string | null
+  created_at: string
+  /** Preenchidos pela API (join). */
+  nome?: string | null
+  telefones?: string[] | null
+  email?: string | null
+  cpf?: string | null
 }
 
 // ============================================================

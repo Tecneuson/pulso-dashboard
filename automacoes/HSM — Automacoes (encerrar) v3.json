@@ -1,5 +1,5 @@
 {
-  "name": "HSM — Automacoes (encerrar + roleta) v2",
+  "name": "HSM — Automacoes (encerrar) v3",
   "nodes": [
     {
       "parameters": {
@@ -115,55 +115,6 @@
     },
     {
       "parameters": {
-        "jsCode": "\n// ROLETA: distribui conversas SEM atendente entre os atendentes, por ordem de chegada.\n// Ordem de chegada = ordem crescente do id da conversa. Round-robin sequencial.\nconst ATENDENTES = [6, 7, 8, 9]; // Angela, Kaylane, Larissa, Natali\n\nconst semAtendente = [];\nfor (const item of $input.all()) {\n  const body = item.json || {};\n  const lista = (body.data && body.data.payload) || body.payload || [];\n  for (const c of lista) {\n    const assignee = c.meta && c.meta.assignee;\n    if (!assignee || !assignee.id) semAtendente.push(c);\n  }\n}\n// ordem de chegada\nsemAtendente.sort((a, b) => Number(a.id) - Number(b.id));\n\nreturn semAtendente.map((c, i) => ({\n  json: { conversation_id: String(c.id), assignee_id: ATENDENTES[i % ATENDENTES.length] },\n}));\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        660,
-        220
-      ],
-      "id": "roletacalc-0001-0001-0001-00000000006",
-      "name": "Roleta: quem atende?"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://chatwoot-t7i7rjvs1n1dk406ji1twbjp.187.127.17.157.sslip.io/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/assignments",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={ \"assignee_id\": {{ $json.assignee_id }} }",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.3,
-      "position": [
-        880,
-        220
-      ],
-      "id": "roletaset-0001-0001-0001-000000000007",
-      "name": "Atribuir atendente",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "wEsXuLAQb5Nl4xD6",
-          "name": "Header Auth admin"
-        }
-      },
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
         "method": "POST",
         "url": "=https://chatwoot-t7i7rjvs1n1dk406ji1twbjp.187.127.17.157.sslip.io/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/custom_attributes",
         "authentication": "genericCredentialType",
@@ -230,11 +181,6 @@
             "node": "Quais encerrar?",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Roleta: quem atende?",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -244,17 +190,6 @@
         [
           {
             "node": "Marcar motivo: Falta de Interação",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Roleta: quem atende?": {
-      "main": [
-        [
-          {
-            "node": "Atribuir atendente",
             "type": "main",
             "index": 0
           }
@@ -281,5 +216,5 @@
     "templateCredsSetupCompleted": true
   },
   "active": false,
-  "versionId": "ce9b3056-a322-44da-9e86-2aba9d499be5"
+  "versionId": "76df3a6c-8d00-4bb1-98b8-72c8120411d5"
 }

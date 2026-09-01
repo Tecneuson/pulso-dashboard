@@ -109,6 +109,7 @@ export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps)
       accent={accent}
       badges={badges}
       nome={triagem.contact_name ?? triagem.paciente?.nome_cliente ?? 'Sem nome'}
+      contatoPrincipal={triagem.contato_principal ?? null}
       documento={cpf ? formatarCpf(cpf) : null}
       convenio={convenioDoLead(triagem)}
       contatos={contatosUnicos}

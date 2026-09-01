@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { segredoConfere } from '@/lib/auth'
-import { botAtivo, isProd } from '@/lib/env'
+import { isProd, n8nAtivo } from '@/lib/env'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { chatwootConfigured, getConversation, postPrivateNote, updateConversationCustomAttributes } from '@/lib/chatwoot/client'
 import { KEYS } from '@/lib/chatwoot/attributes'
@@ -32,6 +32,8 @@ const CAMPOS_SYNC = [
   'origem_conversa',
   'origem_hospital_id',
   'origem_consultor_id',
+  'consultor_id',
+  'responsavel_contato_id',
   'atributos',
 ]
 
@@ -70,14 +72,15 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Transição "triagem acabou agora" (bot n8n gravou transbordado/concluída): pausa o bot e
-  // deixa o resumo. Quando o bot roda dentro do app ele mesmo faz isso.
+  // Transição "triagem acabou agora": pausar o bot e deixar a nota de resumo é
+  // CICLO DE VIDA DO BOT — quem faz é quem hospeda o bot. Com o n8n no ar (padrão),
+  // é ele; o app só assume no modo sem n8n. Sem essa guarda sairiam duas notas.
   const acabouAgora =
     !!old &&
     record.conversation_id &&
     ((record.transbordado === true && old.transbordado !== true) ||
       (record.triagem_concluida === true && old.triagem_concluida !== true))
-  if (acabouAgora && !botAtivo()) {
+  if (acabouAgora && !n8nAtivo()) {
     try {
       const conv = await getConversation(record.conversation_id)
       await updateConversationCustomAttributes(record.conversation_id, { [KEYS.botPausado]: true }, conv.custom_attributes)

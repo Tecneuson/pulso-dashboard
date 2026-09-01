@@ -95,8 +95,8 @@ export default async function SettingsPage() {
                 status={n8n ? 'online' : botAtivo() ? 'online' : 'configurado'}
                 description={
                   n8n
-                    ? 'Triagem por IA, 1º contato, roleta e encerramento automático rodam no n8n (N8N_ATIVO=1).'
-                    : `1º contato, roleta, encerramento e sync rodam no app${botAtivo() ? ' · bot Mônica interno ligado' : ' · bot interno desligado (BOT_ENABLED)'}.`
+                    ? 'Triagem por IA, 1º contato e encerramento automático rodam no n8n (N8N_ATIVO=1).'
+                    : `1º contato, encerramento e sync rodam no app${botAtivo() ? ' · bot Mônica interno ligado' : ' · bot interno desligado (BOT_ENABLED)'}.`
                 }
                 url={n8n ? 'https://hospitalsantamonica.app.n8n.cloud' : undefined}
               />

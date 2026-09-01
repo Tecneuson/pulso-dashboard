@@ -12,7 +12,7 @@ import {
  * Layout único do card do funil (leads e pacientes). Estrutura fixa, sem ícones:
  *
  *   [badges]
- *   Nome
+ *   Nome do paciente  (tag: quem ligou)
  *   CPF                      Convênio
  *   ─────────────────────────────────
  *   Contatos Associados / Agente de Atendimento
@@ -43,6 +43,8 @@ export interface CardProximoContato {
 interface CardBaseProps extends HTMLAttributes<HTMLDivElement> {
   badges: CardBadge[]
   nome: string
+  /** Quem falou primeiro (ex.: "Arthur"). Aparece como tag ao lado do paciente. */
+  contatoPrincipal?: string | null
   documento?: string | null
   convenio?: string | null
   contatos: string[]
@@ -81,6 +83,7 @@ export const CardBase = forwardRef<HTMLDivElement, CardBaseProps>(function CardB
   {
     badges,
     nome,
+    contatoPrincipal,
     documento,
     convenio,
     contatos,
@@ -121,7 +124,19 @@ export const CardBase = forwardRef<HTMLDivElement, CardBaseProps>(function CardB
         </div>
       )}
 
-      <p className="text-[15px] font-semibold text-content-primary truncate leading-snug">{nome}</p>
+      {/* O nome do PACIENTE é o que o hospital procura — fica em destaque. Quem ligou
+          entra como tag ao lado, para a equipe saber com quem falar sem abrir o card. */}
+      <div className="flex items-baseline gap-1.5 min-w-0">
+        <p className="text-[15px] font-semibold text-content-primary truncate leading-snug">{nome}</p>
+        {contatoPrincipal && (
+          <span
+            className="shrink-0 max-w-[45%] truncate rounded-full bg-surface-tertiary border border-border px-1.5 py-0.5 text-[10px] font-medium text-content-secondary"
+            title={`Primeiro contato: ${contatoPrincipal}`}
+          >
+            {contatoPrincipal}
+          </span>
+        )}
+      </div>
 
       <div className="flex items-baseline justify-between gap-2 mt-0.5">
         <span className="text-[12px] text-content-secondary font-mono tabular-nums truncate">

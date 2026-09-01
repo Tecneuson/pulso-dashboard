@@ -3,11 +3,14 @@ import { segredoConfere } from '@/lib/auth'
 import { isProd, n8nAtivo } from '@/lib/env'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { chatwootConfigured } from '@/lib/chatwoot/client'
-import { encerrarInativas, roleta } from '@/lib/automacoes'
+import { encerrarInativas } from '@/lib/automacoes'
 
 /**
- * Automações agendadas (a cada 5 min) — equivalente ao workflow "HSM — Automacoes
- * (encerrar + roleta)" do n8n. Chamar com `Authorization: Bearer <CRON_SECRET>`.
+ * Automações agendadas (a cada 5 min): encerra conversas paradas por inatividade,
+ * marcando "Falta de Interação" antes (senão a regra 12 reabriria a conversa).
+ * Chamar com `Authorization: Bearer <CRON_SECRET>`.
+ *
+ * A distribuição de conversas é da atribuição automática NATIVA do Chatwoot.
  * Só executa em modo sem n8n (N8N_ATIVO=0); com n8n ativo responde 200 sem fazer nada,
  * para os dois não disputarem.
  *
@@ -26,8 +29,8 @@ async function run(request: NextRequest) {
   if (!chatwootConfigured()) return NextResponse.json({ ok: true, skipped: 'chatwoot não configurado' })
 
   const admin = createAdminClient()
-  const [encerrar, rol] = await Promise.all([encerrarInativas(admin), roleta()])
-  return NextResponse.json({ ok: true, encerrar, roleta: rol })
+  const encerrar = await encerrarInativas(admin)
+  return NextResponse.json({ ok: true, encerrar })
 }
 
 export const GET = run

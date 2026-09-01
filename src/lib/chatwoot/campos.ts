@@ -193,6 +193,19 @@ export async function sincronizarDefinicoes(): Promise<SyncDefinicoesResult> {
     }
   }
 
+  // 2b) Campo dinâmico que virou CORE depois (ex.: `nome_do_responsavel`): desativa a
+  //     cópia em `campos_personalizados` — senão o card mostraria o mesmo campo duas
+  //     vezes e as duas escritas disputariam o mesmo atributo no Chatwoot.
+  for (const c of campos) {
+    if (!c.ativo || !CORE_KEYS.has(c.chave)) continue
+    try {
+      await admin.from('campos_personalizados').update({ ativo: false }).eq('id', c.id)
+      r.desativados.push(c.chave)
+    } catch (e) {
+      r.erros.push(`${c.chave}: ${(e as Error).message}`)
+    }
+  }
+
   // 3) Definições no Chatwoot que o CRM ainda não conhece → importa.
   const chavesDb = new Set(campos.map((c) => `${c.modelo}:${c.chave}`))
   let ordem = campos.length
