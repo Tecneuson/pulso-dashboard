@@ -4,22 +4,30 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui'
 import { KpiCard } from '@/components/metrics/kpi-card'
 import { BarChart } from '@/components/metrics/bar-chart'
 import { FiltrosBI } from '@/components/reports/filtros-bi'
+import { TabelaPerformance } from '@/components/reports/tabela-performance'
+import { TabelaCruzamento } from '@/components/reports/cruzamento'
 import { createClient } from '@/lib/supabase/server'
-import { requireGestor } from '@/lib/auth'
 import { chatwootConfigured, contarConversasPorStatus } from '@/lib/chatwoot/client'
+import { grupoDoSlug, listarCategorias, mapaLabels } from '@/lib/categorias'
 import {
   contar,
+  cruzar,
+  dimensoesDisponiveis,
   motivosDePerda,
   pipeline,
+  porAtendente,
   porCategoria,
+  porConsultor,
+  porConvenio,
   porFormaInternacao,
+  porGrupoContato,
   porOrigem,
   porPerfil,
   resolverFiltros,
   statusConversas,
   STATUS_CHATWOOT_LABELS,
   taxaConversao,
-  type Linha,
+  totalLinha,
 } from '@/lib/bi'
 import { CLASSIFICACAO_FUNIL, CLASSIFICACAO_INTERNADO, CLASSIFICACAO_LABELS, type Triagem } from '@/types'
 import type { UsuarioResumo } from '@/lib/api-store'
@@ -34,50 +42,9 @@ function EmptyChart({ message = 'Sem dados no período' }: { message?: string })
   return <p className="text-sm text-content-tertiary py-10 text-center">{message}</p>
 }
 
-const th = 'text-left font-medium px-3 py-2 text-xs uppercase tracking-wide text-content-tertiary'
-const td = 'px-3 py-2 tabular-nums'
-
-function TabelaContagens({ linhas, primeiraColuna }: { linhas: Linha[]; primeiraColuna: string }) {
-  if (!linhas.length) return <EmptyChart />
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-surface-tertiary">
-            <th className={th}>{primeiraColuna}</th>
-            <th className={`${th} text-right`}>Contatos</th>
-            <th className={`${th} text-right`}>Conversas</th>
-            <th className={`${th} text-right`}>Internações</th>
-            <th className={`${th} text-right`}>Perdas</th>
-            <th className={`${th} text-right`}>Conversão</th>
-            <th className={th}>Motivos de perda</th>
-          </tr>
-        </thead>
-        <tbody>
-          {linhas.map((l) => (
-            <tr key={l.chave} className="border-t border-border align-top">
-              <td className={`${td} font-medium text-content-primary`}>{l.label}</td>
-              <td className={`${td} text-right`}>{l.contatos}</td>
-              <td className={`${td} text-right`}>{l.conversas}</td>
-              <td className={`${td} text-right text-success-600 dark:text-success-500`}>{l.internacoes}</td>
-              <td className={`${td} text-right text-danger-600 dark:text-danger-500`}>{l.perdas}</td>
-              <td className={`${td} text-right`}>{l.taxa}%</td>
-              <td className={`${td} text-xs text-content-secondary`}>
-                {l.motivos && l.motivos.length
-                  ? l.motivos.slice(0, 4).map((m) => `${m.label} (${m.count})`).join(' · ') +
-                    (l.motivos.length > 4 ? ` · +${l.motivos.length - 4}` : '')
-                  : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 export default async function ReportsPage({ searchParams }: PageProps) {
-  await requireGestor()
+  // Sem `requireGestor`: o hospital pediu o BI aberto para toda a equipe. O layout do
+  // dashboard já exige sessão, então "todo mundo" = todo mundo logado.
   const sp = await searchParams
   const filtros = resolverFiltros(sp)
   const supabase = await createClient()
@@ -88,9 +55,12 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   if (filtros.ate) query = query.lte('created_at', `${filtros.ate}T23:59:59.999`)
   if (filtros.atendente) query = query.eq('atendente_id', filtros.atendente)
 
-  const [{ data: leadsData }, { data: usuariosData }, churn, chatwootStatus] = await Promise.all([
+  const [{ data: leadsData }, { data: usuariosData }, { data: consultoresData }, perfisCadastrados, churn, chatwootStatus] =
+    await Promise.all([
     query,
     supabase.from('usuarios').select('id, nome, email, role, ativo').order('nome'),
+    supabase.from('consultores').select('id, nome').order('nome'),
+    listarCategorias(supabase),
     // Colunas de churn do funil unificado (classificação do CSV mensal — não depende do período).
     Promise.all(
       [...CLASSIFICACAO_FUNIL, CLASSIFICACAO_INTERNADO].map(async (c) => {
@@ -107,12 +77,30 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const leads = (leadsData ?? []) as Triagem[]
   const atendentes = (usuariosData ?? []) as UsuarioResumo[]
 
+  const nomesConsultores = new Map(((consultoresData ?? []) as { id: string; nome: string }[]).map((c) => [c.id, c.nome]))
+  const nomesAtendentes = new Map(atendentes.map((u) => [u.id, u.nome]))
+  const labels = mapaLabels(perfisCadastrados)
+  const labelPerfil = (slug: string) => labels[slug] ?? slug
+
+  // Performance nas três dimensões pedidas + o rolê por grupo de contato.
+  const consultores = porConsultor(leads, nomesConsultores)
+  const agentes = porAtendente(leads, nomesAtendentes)
+  const convenios = porConvenio(leads)
+  const gruposContato = porGrupoContato(leads, (slug) => grupoDoSlug(perfisCadastrados, slug), labelPerfil)
+
+  // Cruzamento: começa em Motivo de perda x Convênio, que foi o exemplo do hospital.
+  const dims = dimensoesDisponiveis({ consultores: nomesConsultores, atendentes: nomesAtendentes, labelPerfil })
+  const dimA = dims.find((d) => d.chave === sp.cruzA) ?? dims[0]
+  const dimB = dims.find((d) => d.chave === sp.cruzB) ?? dims[1]
+  const matriz = cruzar(leads, dimA, dimB)
+  const totalGeral = totalLinha(leads)
+
   const big = contar(leads)
   const motivos = motivosDePerda(leads)
   const origens = porOrigem(leads)
   const forma = porFormaInternacao(leads)
   const etapas = pipeline(leads)
-  const perfil = porPerfil(leads)
+  const perfil = porPerfil(leads, perfisCadastrados)
   const categorias = porCategoria(leads)
   const statusPeriodo = statusConversas(leads)
   const perdidos = leads.filter((t) => t.motivo_perda || t.estagio_funil === 'recusou_internacao').length
@@ -242,7 +230,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
           <CardTitle>Origens</CardTitle>
         </CardHeader>
         <CardContent>
-          <TabelaContagens linhas={origens} primeiraColuna="Origem" />
+          <TabelaPerformance linhas={origens} primeiraColuna="Origem" total={totalGeral} />
         </CardContent>
       </Card>
 
@@ -252,9 +240,97 @@ export default async function ReportsPage({ searchParams }: PageProps) {
           <CardTitle>Forma de internação</CardTitle>
         </CardHeader>
         <CardContent>
-          <TabelaContagens
+          <TabelaPerformance
             linhas={[forma.particular, ...forma.planos, ...(forma.semPlano.contatos ? [forma.semPlano] : [])]}
             primeiraColuna="Particular / Plano de saúde"
+          />
+        </CardContent>
+      </Card>
+
+      {/* PERFORMANCE — as três dimensões pedidas pelo hospital */}
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>Performance por consultor</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TabelaPerformance linhas={consultores} primeiraColuna="Consultor" total={totalGeral} />
+        </CardContent>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>Performance por agente de atendimento</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TabelaPerformance linhas={agentes} primeiraColuna="Agente" total={totalGeral} />
+          <p className="text-xs text-content-tertiary mt-3">
+            O agente vem da atribuição da conversa no Chatwoot. Leads sem atribuição aparecem em
+            &ldquo;Sem atendente&rdquo;.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>Performance por convênio</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TabelaPerformance linhas={convenios} primeiraColuna="Convênio" total={totalGeral} />
+        </CardContent>
+      </Card>
+
+      {/* CATEGORIA DE CONTATO — total do grupo e, dentro, cada perfil */}
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>Performance por categoria de contato</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {gruposContato.length ? (
+            <div className="space-y-6">
+              {gruposContato.map((g) => (
+                <div key={g.chave}>
+                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mb-2">
+                    <h3 className="font-display text-lg font-semibold text-content-primary">{g.label}</h3>
+                    <span className="text-sm text-content-secondary">
+                      <strong className="text-success-600 dark:text-success-500 tabular-nums">
+                        {g.total.internacoes}
+                      </strong>{' '}
+                      internações ·{' '}
+                      <strong className="tabular-nums text-content-primary">{g.total.contatos}</strong> contatos ·{' '}
+                      <strong className="tabular-nums text-content-primary">{g.total.taxa}%</strong> de conversão
+                    </span>
+                  </div>
+                  <TabelaPerformance
+                    linhas={g.itens}
+                    primeiraColuna="Perfil"
+                    total={g.total}
+                    motivos={false}
+                    vazio="Nenhum perfil detalhado neste grupo"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyChart />
+          )}
+          <p className="text-xs text-content-tertiary mt-3">
+            Os perfis são os cadastrados em Configurações → Categorias de contato. O grupo é onde cada um é
+            somado.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* CRUZAMENTO DE DIMENSÕES */}
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>Cruzar dimensões</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TabelaCruzamento
+            dados={matriz}
+            dimensoes={dims.map((d) => ({ chave: d.chave, label: d.label }))}
+            linhaAtual={dimA.chave}
+            colunaAtual={dimB.chave}
           />
         </CardContent>
       </Card>

@@ -8,7 +8,6 @@ import {
   MOTIVO_PERDA,
   PARA_QUEM,
   STATUS_TRIAGEM,
-  TIPO_CONTATO,
 } from '@/types'
 import { ORIGEM_CONVERSA, ORIGEM_PROFISSIONAL } from '@/lib/funil-etapas'
 
@@ -32,12 +31,23 @@ const enumOuNull = <T extends readonly [string, ...string[]]>(values: T) =>
 
 const atributos = z.record(z.string().regex(/^[a-z0-9_-]{1,64}$/), z.unknown()).nullable()
 
+/**
+ * Perfil do contato. Não é enum fechado: o administrador cadastra perfis novos
+ * (Terapeuta, Psicólogo, …) em Configurações, e um enum aqui recusaria o slug
+ * recém-criado. Validamos o FORMATO; a lista válida é a tabela `categorias_contato`,
+ * e é ela que a interface oferece.
+ */
+const slugCategoria = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.string().regex(/^[a-z][a-z0-9_]{0,63}$/, 'perfil inválido').nullable()
+)
+
 export const triagemPatchSchema = z
   .object({
     id: uuid,
     estagio_funil: enumOuNull(ESTAGIO_FUNIL),
     plano_saude: z.preprocess((v) => (v === '' ? null : v), textoCurto.nullable()),
-    tipo_contato: enumOuNull(TIPO_CONTATO),
+    tipo_contato: slugCategoria,
     para_quem: enumOuNull(PARA_QUEM),
     motivo_contato: enumOuNull(MOTIVO_CONTATO),
     forma_internacao: enumOuNull(['plano', 'particular', 'nao_sabe'] as const),
@@ -74,7 +84,7 @@ export const triagemCreateSchema = z
     phone: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(40).nullable()).optional(),
     email: z.preprocess((v) => (v === '' ? null : v), z.string().trim().email().max(200).nullable()).optional(),
     data_nascimento: z.preprocess((v) => (v === '' ? null : v), dataISO).optional(),
-    tipo_contato: enumOuNull(TIPO_CONTATO).optional(),
+    tipo_contato: slugCategoria.optional(),
     para_quem: enumOuNull(PARA_QUEM).optional(),
     plano_saude: z.preprocess((v) => (v === '' ? null : v), textoCurto.nullable()).optional(),
     forma_internacao: enumOuNull(['plano', 'particular', 'nao_sabe'] as const).optional(),
@@ -166,6 +176,25 @@ export const campoPatchSchema = z
     opcoes: z.array(z.string().trim().min(1).max(80)).max(100),
     ativo: z.boolean(),
     ordem: z.number().int().min(0).max(1000),
+  })
+  .partial()
+  .required({ id: true })
+
+export const categoriaCreateSchema = z.object({
+  label: z.string().trim().min(1).max(60),
+  grupo: z.enum(['paciente', 'responsavel', 'consultor']),
+  descricao: z.string().trim().max(300).nullable().optional(),
+  ordem: z.number().int().min(0).max(9999).optional(),
+})
+
+export const categoriaPatchSchema = z
+  .object({
+    id: uuid,
+    label: z.string().trim().min(1).max(60),
+    grupo: z.enum(['paciente', 'responsavel', 'consultor']),
+    descricao: z.string().trim().max(300).nullable(),
+    ordem: z.number().int().min(0).max(9999),
+    ativo: z.boolean(),
   })
   .partial()
   .required({ id: true })

@@ -8,6 +8,7 @@ import {
   type ChatwootAttributeDefinition,
 } from './client'
 import { CORE_DEFINITIONS, CORE_KEYS, LEGACY_KEYS, type AttributeDefinitionSpec } from './attributes'
+import { listarCategorias } from '@/lib/categorias'
 
 /**
  * Campos personalizados: o Chatwoot é a CENTRAL das definições; a tabela
@@ -78,13 +79,18 @@ function acharDef(defs: ChatwootAttributeDefinition[], key: string, modelo: stri
 async function garantirCore(
   defs: ChatwootAttributeDefinition[],
   r: SyncDefinicoesResult,
-  consultores: string[]
+  consultores: string[],
+  perfisContato: string[]
 ): Promise<void> {
   for (const spec0 of CORE_DEFINITIONS) {
     if (spec0.sistema) continue
     // Lista de consultores: o CRM (`consultores`) é a fonte; o Chatwoot recebe a mesma lista.
-    const spec: AttributeDefinitionSpec =
-      spec0.key === 'consultor_origem' && consultores.length ? { ...spec0, opcoes: consultores } : spec0
+    // Duas listas core não moram no registro: a fonte da verdade é o CRM.
+    let spec: AttributeDefinitionSpec = spec0
+    if (spec0.key === 'consultor_origem' && consultores.length) spec = { ...spec0, opcoes: consultores }
+    // Perfis do contato: o administrador cadastra em Configurações (Terapeuta,
+    // Psicólogo, …) e o Chatwoot recebe exatamente a mesma lista.
+    if (spec0.key === 'quem_e_o_contato' && perfisContato.length) spec = { ...spec0, opcoes: perfisContato }
     const existente = acharDef(defs, spec.key, spec.modelo)
     try {
       if (!existente) {
@@ -141,7 +147,9 @@ export async function sincronizarDefinicoes(): Promise<SyncDefinicoesResult> {
   // 1) Core: existe com o vocabulário certo (consultores vêm da lista única do CRM).
   const { data: cons } = await admin.from('consultores').select('nome').eq('ativo', true).order('nome')
   const nomesConsultores = Array.from(new Set(((cons ?? []) as { nome: string }[]).map((c) => c.nome.trim()).filter(Boolean)))
-  await garantirCore(defs, r, nomesConsultores)
+  const perfis = await listarCategorias(admin)
+  const rotulosPerfis = Array.from(new Set(perfis.map((c) => c.label.trim()).filter(Boolean)))
+  await garantirCore(defs, r, nomesConsultores, rotulosPerfis)
 
   // 2) Dinâmicos do banco.
   const { data: rows, error } = await admin.from('campos_personalizados').select('*')

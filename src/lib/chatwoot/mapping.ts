@@ -108,6 +108,20 @@ const tipoContatoLabelToSlug: Record<string, string> = {
   Paciente: 'lead',
 }
 
+/**
+ * Perfis cadastrados pelo administrador (Terapeuta, Psicólogo, …) entram nos dois
+ * mapas em tempo de execução — senão o rótulo voltaria do Chatwoot sem tradução e
+ * o perfil sumiria do lead. Os objetos acima são os MESMOS referenciados pela tabela
+ * de campos mais abaixo, então mutar aqui basta: não existe cópia a atualizar.
+ */
+export function registrarPerfisContato(perfis: { slug: string; label: string }[]): void {
+  for (const { slug, label } of perfis) {
+    if (!slug || !label) continue
+    tipoContatoMap[slug] = label
+    tipoContatoLabelToSlug[label] = slug
+  }
+}
+
 const paraQuemMap: Record<string, string> = {
   voce_mesmo: 'Você mesmo(a)',
   familiar: 'Familiar',

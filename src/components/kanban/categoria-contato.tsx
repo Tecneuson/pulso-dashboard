@@ -1,15 +1,9 @@
 'use client'
 
-import {
-  CATEGORIA_CONTATO,
-  CATEGORIA_CONTATO_LABELS,
-  PERFIS_POR_CATEGORIA,
-  TIPO_CONTATO_LABELS,
-  categoriaDoTipo,
-  type CategoriaContato,
-  type TipoContato,
-} from '@/types'
-import { useConsultores, useResponsaveis } from '@/lib/api-store'
+import { useMemo } from 'react'
+import { type CategoriaContato } from '@/types'
+import { useCategoriasContato, useConsultores, useResponsaveis } from '@/lib/api-store'
+import { CATEGORIAS_PADRAO, grupoDoSlug, porGrupo } from '@/lib/categorias'
 import { PessoaField } from './pessoa-field'
 
 /**
@@ -20,8 +14,9 @@ import { PessoaField } from './pessoa-field'
  * a pessoa que intermedeia costuma voltar em outros atendimentos: o mesmo
  * consultor (ou o mesmo familiar) pode estar vinculado a VÁRIOS pacientes.
  *
- * Nos relatórios a categoria se desdobra em 5 perfis (Lead / Ex-paciente /
- * Responsável / Médico / Consultor) — é o que fica gravado em `tipo_contato`.
+ * Nos relatórios a categoria se desdobra em PERFIS (Lead / Ex-paciente / Responsável /
+ * Médico / Consultor / Terapeuta / …) — é o que fica gravado em `tipo_contato`. A lista
+ * é gerenciada pelo administrador em Configurações, então nada aqui é fixo no código.
  *
  * ⚠️ CATEGORIA ≠ ORIGEM. Aqui é **quem está falando agora**. Por onde o paciente
  * chegou é outra dimensão, editada em `OrigemFields` (`origem_conversa`), e as duas
@@ -51,8 +46,14 @@ export function CategoriaContatoField({
 }) {
   const consultores = useConsultores()
   const responsaveis = useResponsaveis()
+  const categorias = useCategoriasContato()
 
-  const categoria = categoriaDoTipo(value.tipo_contato)
+  // Antes do primeiro carregamento (e enquanto a migration não roda) vale a lista fixa:
+  // um seletor vazio impediria de classificar o contato.
+  const perfis = categorias.ativos.length ? categorias.ativos : CATEGORIAS_PADRAO
+  const grupos = useMemo(() => porGrupo(perfis), [perfis])
+
+  const categoria = grupoDoSlug(perfis, value.tipo_contato)
 
   function escolherCategoria(c: CategoriaContato | null) {
     if (!c) {
@@ -60,37 +61,35 @@ export function CategoriaContatoField({
       return
     }
     // Mantém o perfil quando ele já pertence à categoria escolhida.
-    const perfis = PERFIS_POR_CATEGORIA[c]
-    const perfil = perfis.includes(value.tipo_contato as TipoContato)
-      ? (value.tipo_contato as TipoContato)
-      : perfis[0]
+    const daCategoria = grupos.find((g) => g.grupo === c)?.perfis ?? []
+    const atual = daCategoria.find((p) => p.slug === value.tipo_contato)
     // Não apagamos os vínculos ao trocar de categoria: um RESPONSÁVEL pode ter sido
     // encaminhado por um CONSULTOR (as duas informações convivem). Para desfazer um
     // vínculo, use o "x" do próprio campo.
-    onChange({ tipo_contato: perfil })
+    onChange({ tipo_contato: atual?.slug ?? daCategoria[0]?.slug ?? null })
   }
 
-  const perfisDaCategoria = categoria ? PERFIS_POR_CATEGORIA[categoria] : []
+  const perfisDaCategoria = categoria ? grupos.find((g) => g.grupo === categoria)?.perfis ?? [] : []
 
   return (
     <div className="space-y-3">
       <div>
         <p className="text-overline uppercase text-content-tertiary mb-1">Categoria do contato</p>
         <div className="grid grid-cols-3 gap-1.5">
-          {CATEGORIA_CONTATO.map((c) => {
-            const ativo = categoria === c
+          {grupos.map((g) => {
+            const ativo = categoria === g.grupo
             return (
               <button
-                key={c}
+                key={g.grupo}
                 type="button"
-                onClick={() => escolherCategoria(ativo ? null : c)}
+                onClick={() => escolherCategoria(ativo ? null : g.grupo)}
                 className={`rounded-lg border px-2 py-2 text-sm font-medium transition-colors ${
                   ativo
                     ? 'bg-brand-500/15 border-brand-500/40 text-brand-700 dark:text-brand-300'
                     : 'bg-surface-secondary border-border text-content-secondary hover:border-border-hover hover:text-content-primary'
                 }`}
               >
-                {CATEGORIA_CONTATO_LABELS[c]}
+                {g.label}
               </button>
             )
           })}
@@ -107,16 +106,17 @@ export function CategoriaContatoField({
           <div className="flex gap-1.5">
             {perfisDaCategoria.map((p) => (
               <button
-                key={p}
+                key={p.slug}
                 type="button"
-                onClick={() => onChange({ tipo_contato: p })}
+                onClick={() => onChange({ tipo_contato: p.slug })}
+                title={p.descricao ?? undefined}
                 className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  value.tipo_contato === p
+                  value.tipo_contato === p.slug
                     ? 'bg-brand-500/12 border-brand-500/40 text-brand-700 dark:text-brand-300'
                     : 'bg-surface-secondary border-border text-content-secondary hover:text-content-primary'
                 }`}
               >
-                {TIPO_CONTATO_LABELS[p]}
+                {p.label}
               </button>
             ))}
           </div>

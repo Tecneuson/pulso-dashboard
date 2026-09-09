@@ -5,7 +5,8 @@ import { Search, Download, Phone, Mail } from 'lucide-react'
 import { Input, Select, Button, EtapaBadge } from '@/components/ui'
 import { CardDetail } from '@/components/kanban/card-detail'
 import type { Triagem, TriagemLead } from '@/types'
-import { ASSUNTO_LABELS, MOTIVO_CONTATO, MOTIVO_CONTATO_LABELS, TIPO_CONTATO_LABELS } from '@/types'
+import { ASSUNTO_LABELS, MOTIVO_CONTATO, MOTIVO_CONTATO_LABELS } from '@/types'
+import { useLabelPerfil } from '@/lib/api-store'
 import { comEtapa, etapaFromEstagio, FUNIL_ETAPA_OPTIONS } from '@/lib/funil-etapas'
 import { PLANO_LABELS } from '@/lib/chatwoot/mapping'
 import { CONVENIO_FILTRO } from '@/lib/funil'
@@ -60,6 +61,7 @@ interface ContactsTableProps {
 }
 
 export function ContactsTable({ triagens, initialSearch = '' }: ContactsTableProps) {
+  const labelPerfil = useLabelPerfil()
   const [search, setSearch] = useState(initialSearch)
   const [stage, setStage] = useState<string>('')
   const [plano, setPlano] = useState<string>('')
@@ -199,7 +201,7 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
                       </div>
                     </td>
                     <td className="px-4 py-3 text-content-secondary">
-                      {t.tipo_contato ? TIPO_CONTATO_LABELS[t.tipo_contato] ?? t.tipo_contato : '—'}
+                      {labelPerfil(t.tipo_contato)}
                       {t.kids && <span className="ml-1 text-[10px] uppercase text-info-600">Kids</span>}
                     </td>
                     <td className="px-4 py-3 text-content-secondary">

@@ -3,6 +3,8 @@
 import { useMemo, useSyncExternalStore } from 'react'
 import type { Agendamento, CampoPersonalizado, Captador, Consultor, Hospital, Responsavel } from '@/types'
 import { chaveAlvo, situacaoAgendamento, type SituacaoAgendamento } from '@/lib/agendamentos'
+import type { CategoriaContatoRow } from '@/lib/categorias'
+import { TIPO_CONTATO_LABELS } from '@/types'
 
 /**
  * Coleções pequenas servidas por API (consultores, hospitais) com cache reativo
@@ -106,6 +108,8 @@ const camposCol = new ApiCollection<CampoPersonalizado>('/api/campos')
 const responsaveisCol = new ApiCollection<Responsavel>('/api/responsaveis')
 /** Só os agendamentos PENDENTES — é o que o card do funil precisa (próximo contato). */
 const agendamentosCol = new ApiCollection<Agendamento>('/api/agendamentos', '?status=pendente')
+/** `todas=1`: a tela de Configurações precisa ver também os perfis desativados. */
+const categoriasCol = new ApiCollection<CategoriaContatoRow>('/api/categorias-contato', '?todas=1')
 
 export function useConsultores() {
   const items = useSyncExternalStore(
@@ -170,6 +174,45 @@ export function useCaptadores() {
     remove: captadoresCol.remove,
     error: captadoresCol.getError(),
   }
+}
+
+/**
+ * Perfis de contato gerenciados pelo administrador. `ativos` é o que o card oferece;
+ * `items` inclui os desativados, para a tela de Configurações poder reativá-los.
+ */
+export function useCategoriasContato() {
+  const items = useSyncExternalStore(
+    categoriasCol.subscribe,
+    categoriasCol.getSnapshot,
+    categoriasCol.getServerSnapshot
+  )
+  const ativos = useMemo(() => items.filter((c) => c.ativo), [items])
+  return {
+    items,
+    ativos,
+    add: categoriasCol.add,
+    update: categoriasCol.update,
+    remove: categoriasCol.remove,
+    refresh: () => categoriasCol.load(),
+    error: categoriasCol.getError(),
+  }
+}
+
+/**
+ * Tradutor slug → rótulo do perfil, já com os perfis que o administrador cadastrou.
+ * Devolve o próprio slug quando não conhece — nunca uma célula vazia.
+ */
+export function useLabelPerfil(): (slug: string | null | undefined) => string {
+  const items = useSyncExternalStore(
+    categoriasCol.subscribe,
+    categoriasCol.getSnapshot,
+    categoriasCol.getServerSnapshot
+  )
+  return useMemo(() => {
+    const mapa: Record<string, string> = { ...TIPO_CONTATO_LABELS }
+    for (const c of items) mapa[c.slug] = c.label
+    return (slug: string | null | undefined) => (slug ? mapa[slug] ?? slug : '—')
+  }, [items])
 }
 
 /**

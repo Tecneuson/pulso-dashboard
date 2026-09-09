@@ -3,6 +3,7 @@ import { Header } from '@/components/layout/header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui'
 import { Cadastros } from '@/components/settings/cadastros'
 import { CamposPersonalizados } from '@/components/settings/campos-personalizados'
+import { CategoriasContato } from '@/components/settings/categorias-contato'
 import { requireGestor } from '@/lib/auth'
 import { botAtivo, exigirDesfecho, n8nAtivo } from '@/lib/env'
 
@@ -184,6 +185,10 @@ export default async function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="mt-4">
+        <CategoriasContato />
+      </div>
 
       <div className="mt-4">
         <CamposPersonalizados />

@@ -2,7 +2,8 @@
 
 import { useDraggable } from '@dnd-kit/core'
 import { ExternalLink } from 'lucide-react'
-import { MOTIVO_PERDA_LABELS, TIPO_CONTATO_LABELS } from '@/types'
+import { MOTIVO_PERDA_LABELS } from '@/types'
+import { useLabelPerfil } from '@/lib/api-store'
 import { formatarCpf } from '@/lib/cpf'
 import { classificacaoMeta } from '@/lib/funil'
 import { situacaoAgendamento } from '@/lib/agendamentos'
@@ -19,8 +20,6 @@ interface KanbanCardProps {
   isDragOverlay?: boolean
 }
 
-const tipoContatoLabels: Record<string, string> = TIPO_CONTATO_LABELS
-
 function convenioDoLead(t: LeadComEtapa): string {
   if (t.plano_saude) return PLANO_LABELS[t.plano_saude] ?? t.plano_saude
   if (t.paciente?.convenio_raw) return t.paciente.convenio_raw
@@ -33,6 +32,7 @@ export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps)
     id: triagem.id,
   })
   const dados = useFunilDados()
+  const labelPerfil = useLabelPerfil()
 
   const isUrgent =
     triagem.observacoes?.toLowerCase().includes('urgente') ||
@@ -45,7 +45,7 @@ export function KanbanCard({ triagem, onClick, isDragOverlay }: KanbanCardProps)
   const badges: CardBadge[] = [
     {
       label: triagem.tipo_contato
-        ? tipoContatoLabels[triagem.tipo_contato] ?? triagem.tipo_contato
+        ? labelPerfil(triagem.tipo_contato)
         : 'Lead',
     },
   ]

@@ -144,17 +144,23 @@ export function pipeline(leads: Triagem[]): EtapaPipeline[] {
 }
 
 // ---------- perfil ----------
-export function porPerfil(leads: Triagem[]): { chave: string; label: string; count: number }[] {
+export function porPerfil(
+  leads: Triagem[],
+  perfis?: { slug: string; label: string }[]
+): { chave: string; label: string; count: number }[] {
   const counts = new Map<string, number>()
   for (const t of leads) counts.set(t.tipo_contato ?? 'nao_informado', (counts.get(t.tipo_contato ?? 'nao_informado') ?? 0) + 1)
-  const out: { chave: string; label: string; count: number }[] = TIPO_CONTATO.map((tipo) => ({
-    chave: tipo,
-    label: TIPO_CONTATO_LABELS[tipo],
-    count: counts.get(tipo) ?? 0,
+  // Sem a lista cadastrada (migration pendente) cai nos 5 perfis fixos do código.
+  const base = perfis?.length ? perfis : TIPO_CONTATO.map((t) => ({ slug: t, label: TIPO_CONTATO_LABELS[t] }))
+  const conhecidos = new Set(base.map((b) => b.slug))
+  const out: { chave: string; label: string; count: number }[] = base.map((b) => ({
+    chave: b.slug,
+    label: b.label,
+    count: counts.get(b.slug) ?? 0,
   }))
   // valores legados que ainda não migraram
   for (const [k, v] of Array.from(counts.entries())) {
-    if ((TIPO_CONTATO as readonly string[]).includes(k) || k === 'nao_informado') continue
+    if (conhecidos.has(k) || k === 'nao_informado') continue
     out.push({ chave: k, label: `${k} (legado)`, count: v })
   }
   if (counts.get('nao_informado')) out.push({ chave: 'nao_informado', label: 'Não informado', count: counts.get('nao_informado')! })
@@ -224,4 +230,228 @@ export function resolverFiltros(sp: Record<string, string | undefined>): Filtros
   }
   const atendente = /^[0-9a-f-]{36}$/i.test(sp.atendente ?? '') ? (sp.atendente as string) : ''
   return { de, ate, atendente, preset }
+}
+
+// =============================================================================
+// Performance por dimensão (Consultor · Atendente · Convênio) e cruzamentos.
+//
+// O hospital quer ler o total do grupo e, dentro dele, o detalhe por pessoa:
+// "Consultores: 20 internações" e, abaixo, Rafael 10 e Arthur 10.
+//
+// Por isso tudo aqui devolve `Linha` (as mesmas colunas da tabela de origens), e o
+// total do grupo é uma `Linha` calculada sobre a união — não a soma das partes,
+// senão um lead sem consultor sumiria da conta.
+// =============================================================================
+
+const SEM_ATRIBUICAO = 'sem_atribuicao'
+
+/** Agrupa por uma chave do lead, com um dicionário chave → nome. */
+function porChave(
+  leads: Triagem[],
+  chaveDe: (t: Triagem) => string | null | undefined,
+  nomeDe: (chave: string) => string,
+  rotuloVazio: string | null
+): Linha[] {
+  const grupos = new Map<string, Triagem[]>()
+  const vazios: Triagem[] = []
+  for (const t of leads) {
+    const k = chaveDe(t)
+    if (!k) {
+      vazios.push(t)
+      continue
+    }
+    const atual = grupos.get(k)
+    if (atual) atual.push(t)
+    else grupos.set(k, [t])
+  }
+  const out = Array.from(grupos.entries())
+    .map(([k, subset]) => linha(k, nomeDe(k), subset, true))
+    .sort((a, b) => b.internacoes - a.internacoes || b.contatos - a.contatos)
+  if (rotuloVazio && vazios.length) out.push(linha(SEM_ATRIBUICAO, rotuloVazio, vazios, true))
+  return out
+}
+
+/** Performance de cada consultor. `nomes` vem da tabela `consultores`. */
+export function porConsultor(leads: Triagem[], nomes: Map<string, string>): Linha[] {
+  return porChave(leads, (t) => t.consultor_id, (k) => nomes.get(k) ?? 'Consultor removido', 'Sem consultor')
+}
+
+/** Performance de cada agente do comercial. `nomes` vem da tabela `usuarios`. */
+export function porAtendente(leads: Triagem[], nomes: Map<string, string>): Linha[] {
+  return porChave(leads, (t) => t.atendente_id, (k) => nomes.get(k) ?? 'Usuário removido', 'Sem atendente')
+}
+
+/** Performance por convênio. Particular entra como uma linha própria. */
+export function porConvenio(leads: Triagem[]): Linha[] {
+  return porChave(
+    leads,
+    (t) => (t.forma_internacao === 'particular' ? 'particular' : t.plano_saude || null),
+    (k) => (k === 'particular' ? 'Particular' : PLANO_LABELS[k] ?? k),
+    'Sem convênio informado'
+  )
+}
+
+/** O conjunto inteiro como uma `Linha` — serve de rodapé das tabelas. */
+export function totalLinha(leads: Triagem[], label = 'Total'): Linha {
+  return linha('__total__', label, leads, true)
+}
+
+export interface GrupoPerformance {
+  chave: string
+  label: string
+  total: Linha
+  itens: Linha[]
+}
+
+/**
+ * Performance por GRUPO de contato (Paciente / Responsável / Consultor), com os
+ * perfis de cada grupo detalhados dentro. `grupoDe` e `labelPerfil` vêm de
+ * `lib/categorias`, para respeitar os perfis que o administrador cadastrou.
+ */
+export function porGrupoContato(
+  leads: Triagem[],
+  grupoDe: (slug: string | null | undefined) => string | null,
+  labelPerfil: (slug: string) => string
+): GrupoPerformance[] {
+  const mapa = new Map<string, Triagem[]>()
+  for (const t of leads) {
+    const g = grupoDe(t.tipo_contato) ?? 'nao_informado'
+    const atual = mapa.get(g)
+    if (atual) atual.push(t)
+    else mapa.set(g, [t])
+  }
+  const ordem: string[] = [...CATEGORIA_CONTATO, 'nao_informado']
+  return ordem
+    .filter((g) => mapa.has(g))
+    .map((g) => {
+      const subset = mapa.get(g)!
+      return {
+        chave: g,
+        label:
+          g === 'nao_informado'
+            ? 'Não informado'
+            : CATEGORIA_CONTATO_LABELS[g as keyof typeof CATEGORIA_CONTATO_LABELS],
+        total: linha(g, 'Total do grupo', subset, true),
+        itens: porChave(subset, (t) => t.tipo_contato, (k) => labelPerfil(k), null),
+      }
+    })
+}
+
+// ---------- cruzamento de duas dimensões ----------
+
+export interface DimensaoSpec {
+  chave: string
+  label: string
+  valor: (t: Triagem) => { chave: string; label: string } | null
+}
+
+export interface ContextoDimensoes {
+  consultores: Map<string, string>
+  atendentes: Map<string, string>
+  labelPerfil: (slug: string) => string
+}
+
+/**
+ * As dimensões que podem ser cruzadas. `valor` devolve null quando o lead não
+ * pertence à dimensão — assim uma linha "não informado" só aparece se houver caso.
+ */
+export function dimensoesDisponiveis(ctx: ContextoDimensoes): DimensaoSpec[] {
+  return [
+    {
+      chave: 'motivo_perda',
+      label: 'Motivo de perda',
+      valor: (t) =>
+        t.motivo_perda ? { chave: t.motivo_perda, label: MOTIVO_PERDA_LABELS[t.motivo_perda] ?? t.motivo_perda } : null,
+    },
+    {
+      chave: 'convenio',
+      label: 'Convênio',
+      valor: (t) =>
+        t.forma_internacao === 'particular'
+          ? { chave: 'particular', label: 'Particular' }
+          : t.plano_saude
+            ? { chave: t.plano_saude, label: PLANO_LABELS[t.plano_saude] ?? t.plano_saude }
+            : null,
+    },
+    {
+      chave: 'consultor',
+      label: 'Consultor',
+      valor: (t) =>
+        t.consultor_id ? { chave: t.consultor_id, label: ctx.consultores.get(t.consultor_id) ?? 'Consultor removido' } : null,
+    },
+    {
+      chave: 'atendente',
+      label: 'Agente de atendimento',
+      valor: (t) =>
+        t.atendente_id ? { chave: t.atendente_id, label: ctx.atendentes.get(t.atendente_id) ?? 'Usuário removido' } : null,
+    },
+    {
+      chave: 'perfil',
+      label: 'Perfil do contato',
+      valor: (t) => (t.tipo_contato ? { chave: t.tipo_contato, label: ctx.labelPerfil(t.tipo_contato) } : null),
+    },
+    {
+      chave: 'origem',
+      label: 'Origem da conversa',
+      valor: (t) =>
+        t.origem_conversa
+          ? {
+              chave: t.origem_conversa,
+              label:
+                ORIGEM_CONVERSA_LABELS[t.origem_conversa as keyof typeof ORIGEM_CONVERSA_LABELS] ?? t.origem_conversa,
+            }
+          : null,
+    },
+    {
+      chave: 'etapa',
+      label: 'Etapa do funil',
+      valor: (t) => {
+        const e = etapaFromEstagio(t.estagio_funil)
+        return e ? { chave: e, label: FUNIL_ETAPA_LABELS[e] } : null
+      },
+    },
+  ]
+}
+
+export interface Cruzamento {
+  colunas: { chave: string; label: string; total: number }[]
+  linhas: { chave: string; label: string; celulas: number[]; total: number }[]
+  total: number
+}
+
+/**
+ * Matriz de contagens entre duas dimensões (ex.: Motivo de perda x Convênio).
+ * Leads que não pertencem a alguma das duas ficam de fora: cruzar "motivo de perda"
+ * com qualquer coisa só faz sentido sobre quem tem motivo de perda.
+ */
+export function cruzar(leads: Triagem[], dimLinha: DimensaoSpec, dimColuna: DimensaoSpec): Cruzamento {
+  const rotulosLinha = new Map<string, string>()
+  const rotulosColuna = new Map<string, string>()
+  const celulas = new Map<string, number>()
+
+  for (const t of leads) {
+    const a = dimLinha.valor(t)
+    const b = dimColuna.valor(t)
+    if (!a || !b) continue
+    rotulosLinha.set(a.chave, a.label)
+    rotulosColuna.set(b.chave, b.label)
+    const k = `${a.chave} ${b.chave}`
+    celulas.set(k, (celulas.get(k) ?? 0) + 1)
+  }
+
+  const colunas = Array.from(rotulosColuna.entries()).map(([chave, label]) => ({
+    chave,
+    label,
+    total: Array.from(rotulosLinha.keys()).reduce((s, lk) => s + (celulas.get(`${lk} ${chave}`) ?? 0), 0),
+  }))
+  colunas.sort((a, b) => b.total - a.total)
+
+  const linhas = Array.from(rotulosLinha.entries())
+    .map(([chave, label]) => {
+      const vals = colunas.map((c) => celulas.get(`${chave} ${c.chave}`) ?? 0)
+      return { chave, label, celulas: vals, total: vals.reduce((s, n) => s + n, 0) }
+    })
+    .sort((a, b) => b.total - a.total)
+
+  return { colunas, linhas, total: linhas.reduce((s, l) => s + l.total, 0) }
 }

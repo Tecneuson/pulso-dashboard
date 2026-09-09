@@ -415,6 +415,11 @@ export async function onMessageCreated(body: AnyObj): Promise<AnyObj> {
  * filho. Passando de 4 responsáveis, o contato só entra no histórico.
  */
 async function reconhecerContato(admin: SupabaseClient, row: AnyObj, sender: AnyObj): Promise<AnyObj> {
+  // Paciente falando do próprio caso não é "responsável" de si mesmo: sem vínculo, senão
+  // o card ganha uma tag repetindo o nome que já está no título. Sai antes de
+  // identificarPessoa() de propósito — ela criaria a ficha do responsável à toa.
+  if (row.para_quem === 'voce_mesmo') return { vinculo: 'proprio_paciente' }
+
   const out: AnyObj = {}
   try {
     const pessoa = await identificarPessoa(admin, sender?.phone_number, sender?.name)

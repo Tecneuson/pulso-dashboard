@@ -39,6 +39,8 @@ export interface FiltrosState {
   classificacoes: string[]
   /** Agente de atendimento (usuarios.id em triagem_hsm.atendente_id). */
   atendentes: string[]
+  /** Status da conversa no Chatwoot (open/pending/snoozed/resolved). */
+  statusConversa: string[]
   datePreset: '' | 'hoje' | '7d' | '30d' | 'semana' | 'mes' | 'custom'
   dataInicio: string
   dataFim: string
@@ -48,6 +50,8 @@ export interface FiltrosState {
   agendado: '' | 'indefinido' | 'em_conformidade' | 'atrasado'
   /** Kids (8–17 anos, derivado da data de nascimento) — '' = todos. */
   kids: '' | 'sim' | 'nao'
+  /** Elegibilidade avaliada pelo hospital — '' = todos. */
+  elegivel: '' | 'sim' | 'nao' | 'nao_avaliado'
   ordenar: OrdenacaoFunil
 }
 
@@ -66,6 +70,7 @@ export const FILTROS_INICIAL: FiltrosState = {
   motivosPerda: [],
   classificacoes: [],
   atendentes: [],
+  statusConversa: [],
   datePreset: '',
   dataInicio: '',
   dataFim: '',
@@ -73,6 +78,7 @@ export const FILTROS_INICIAL: FiltrosState = {
   fonte: '',
   agendado: '',
   kids: '',
+  elegivel: '',
   ordenar: 'recentes',
 }
 
@@ -91,6 +97,7 @@ export const DIMENSOES_ARRAY: (keyof FiltrosState)[] = [
   'motivosPerda',
   'classificacoes',
   'atendentes',
+  'statusConversa',
 ]
 
 /** Nº de dimensões ativas (para o badge do botão "Filtros"). */
@@ -103,6 +110,7 @@ export function contarDimensoesAtivas(f: FiltrosState): number {
   if (f.fonte) n++
   if (f.agendado) n++
   if (f.kids) n++
+  if (f.elegivel) n++
   return n
 }
 
@@ -252,6 +260,13 @@ export function leadPassa(
   )
     return false
 
+  if (
+    on('statusConversa') &&
+    f.statusConversa.length &&
+    !(l.chatwoot_status && f.statusConversa.includes(l.chatwoot_status))
+  )
+    return false
+
   if (on('datePreset') && !dentroDaData(l, f)) return false
 
   if (on('urgencia') && f.urgencia) {
@@ -264,6 +279,14 @@ export function leadPassa(
     const manual = !l.conversation_id // sem conversa no Chatwoot = criado manualmente
     if (f.fonte === 'manual' && !manual) return false
     if (f.fonte === 'banco' && manual) return false
+  }
+
+  // Elegível é boolean anulável: null significa "ainda não avaliado", que é
+  // informação útil por si (fila de avaliação) e não o mesmo que "não elegível".
+  if (on('elegivel') && f.elegivel) {
+    if (f.elegivel === 'sim' && l.elegivel !== true) return false
+    if (f.elegivel === 'nao' && l.elegivel !== false) return false
+    if (f.elegivel === 'nao_avaliado' && l.elegivel !== null && l.elegivel !== undefined) return false
   }
 
   if (on('kids') && f.kids) {
@@ -361,6 +384,12 @@ export const OPCOES = {
   profissionais: ORIGEM_PROFISSIONAL_OPTIONS,
   motivosPerda: FIELD_OPTIONS.motivo_perda ?? [],
   classificacoes: CLASSIFICACAO_FILTRO_OPTS,
+  statusConversa: [
+    { value: 'open', label: 'Aberta' },
+    { value: 'pending', label: 'Pendente' },
+    { value: 'snoozed', label: 'Adiada' },
+    { value: 'resolved', label: 'Resolvida' },
+  ],
 }
 
 /** Períodos do painel "Filtros" (o print pede Esta semana / Mês atual em destaque). */

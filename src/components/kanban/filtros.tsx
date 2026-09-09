@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { FUNIL_ETAPA_VAR, type LeadComEtapa } from '@/lib/funil-etapas'
-import { useConsultores, useHospitais, useUsuarios } from '@/lib/api-store'
+import { useCategoriasContato, useConsultores, useHospitais, useUsuarios } from '@/lib/api-store'
 import { AGENDADOS_FILTRO_OPTS } from '@/lib/agendamentos'
 import {
   FILTROS_INICIAL,
@@ -46,6 +46,7 @@ const DIM_LABEL: Record<string, string> = {
   motivosPerda: 'Motivo da perda',
   classificacoes: 'Classificação',
   atendentes: 'Agente',
+  statusConversa: 'Conversa',
 }
 
 // ------------------------------------------------------------
@@ -195,6 +196,19 @@ function Segmented({
   )
 }
 
+// Listas longas (≈260 hospitais, 30 motivos de perda) não cabem como chips: o painel
+// virava uma parede de rolagem. Duas regras resolvem:
+//  1. só aparece o que TEM lead no recorte atual (mais o que já está marcado, senão o
+//     filtro ativo sumiria da tela);
+//  2. acima de LIMITE_VISIVEL, o resto fica atrás de "ver mais", e listas grandes
+//     ganham busca — que procura em TUDO, inclusive no que está oculto por não ter lead.
+const LIMITE_VISIVEL = 12
+const LIMIAR_BUSCA = 10
+
+function semAcento(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
 // Grupo de toggle-chips de uma dimensão, com contagem facetada.
 function ChipGroup({
   label,
@@ -214,6 +228,8 @@ function ChipGroup({
   colorFn?: (value: string) => string | undefined
 }) {
   const selecionados = filtros[dim] as string[]
+  const [busca, setBusca] = useState('')
+  const [expandido, setExpandido] = useState(false)
 
   const comContagem = useMemo(
     () =>
@@ -227,6 +243,13 @@ function ChipGroup({
         }),
     [options, leads, filtros, dim, selecionados]
   )
+
+  const q = semAcento(busca)
+  const relevantes = comContagem.filter((o) => o.count > 0 || selecionados.includes(o.value))
+  const semLead = comContagem.length - relevantes.length
+  const base = q ? comContagem.filter((o) => semAcento(o.label).includes(q)) : relevantes
+  const visiveis = expandido || q ? base : base.slice(0, LIMITE_VISIVEL)
+  const restantes = base.length - visiveis.length
 
   function toggle(value: string) {
     const next = selecionados.includes(value)
@@ -249,8 +272,19 @@ function ChipGroup({
           </button>
         )}
       </div>
+
+      {options.length > LIMIAR_BUSCA && (
+        <input
+          type="search"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder={`Buscar em ${options.length}…`}
+          className="w-full h-8 mb-2 rounded bg-surface-tertiary border border-border text-xs px-2 text-content-primary placeholder:text-content-tertiary focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+        />
+      )}
+
       <div className="flex flex-wrap gap-1.5">
-        {comContagem.map((o) => (
+        {visiveis.map((o) => (
           <ToggleChip
             key={o.value}
             active={selecionados.includes(o.value)}
@@ -261,10 +295,39 @@ function ChipGroup({
             {o.label}
           </ToggleChip>
         ))}
-        {options.length === 0 && (
-          <p className="text-xs text-content-tertiary">Nenhuma opção cadastrada.</p>
+
+        {restantes > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpandido(true)}
+            className="rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-content-secondary hover:text-content-primary hover:border-border-hover"
+          >
+            ver mais {restantes}
+          </button>
+        )}
+        {expandido && !q && base.length > LIMITE_VISIVEL && (
+          <button
+            type="button"
+            onClick={() => setExpandido(false)}
+            className="rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-content-secondary hover:text-content-primary"
+          >
+            ver menos
+          </button>
+        )}
+
+        {options.length === 0 && <p className="text-xs text-content-tertiary">Nenhuma opção cadastrada.</p>}
+        {options.length > 0 && base.length === 0 && (
+          <p className="text-xs text-content-tertiary">
+            {q ? 'Nada encontrado.' : 'Nenhum lead usa esta dimensão no recorte atual.'}
+          </p>
         )}
       </div>
+
+      {!q && semLead > 0 && (
+        <p className="text-[11px] text-content-tertiary mt-1.5">
+          {semLead} sem lead no recorte {options.length > LIMIAR_BUSCA ? '(use a busca para encontrar)' : ''}
+        </p>
+      )}
     </div>
   )
 }
@@ -288,6 +351,7 @@ export function Filtros({ leads, filtrados, filtros, onChange, statusRealtime }:
   const consultores = useConsultores()
   const hospitais = useHospitais()
   const usuarios = useUsuarios()
+  const categorias = useCategoriasContato()
 
   const total = leads.length
   const dimsAtivas = contarDimensoesAtivas(filtros)
@@ -298,12 +362,18 @@ export function Filtros({ leads, filtrados, filtros, onChange, statusRealtime }:
   // Lista unificada: o "Consultor" do lead e o "Consultor (origem)" usam o mesmo cadastro.
   const captadorOpts: Opt[] = consultorOpts
   const agenteOpts: Opt[] = usuarios.items.map((u) => ({ value: u.id, label: u.nome }))
+  // Perfis vêm do cadastro (Configurações), não de uma lista fixa: Terapeuta e
+  // Psicólogo precisam aparecer aqui assim que o administrador criar.
+  const tipoOpts: Opt[] = categorias.ativos.length
+    ? categorias.ativos.map((c) => ({ value: c.slug, label: c.label }))
+    : OPCOES.tipos
 
   function optionLabel(dim: keyof FiltrosState, value: string): string {
     if (dim === 'consultores') return consultorOpts.find((o) => o.value === value)?.label ?? value
     if (dim === 'hospitais') return hospitalOpts.find((o) => o.value === value)?.label ?? value
     if (dim === 'captadores') return captadorOpts.find((o) => o.value === value)?.label ?? value
     if (dim === 'atendentes') return agenteOpts.find((o) => o.value === value)?.label ?? value
+    if (dim === 'tipos') return tipoOpts.find((o) => o.value === value)?.label ?? value
     const list = (OPCOES as Record<string, Opt[]>)[dim as string]
     return list?.find((o) => o.value === value)?.label ?? value
   }
@@ -346,6 +416,13 @@ export function Filtros({ leads, filtrados, filtros, onChange, statusRealtime }:
       key: 'fonte',
       label: filtros.fonte === 'manual' ? 'Lead manual' : 'Lead do banco',
       onClear: () => onChange({ ...filtros, fonte: '' }),
+    })
+  if (filtros.elegivel)
+    chips.push({
+      key: 'elegivel',
+      label:
+        filtros.elegivel === 'sim' ? 'Elegível' : filtros.elegivel === 'nao' ? 'Não elegível' : 'Sem avaliação',
+      onClear: () => onChange({ ...filtros, elegivel: '' }),
     })
   if (filtros.kids)
     chips.push({
@@ -553,6 +630,14 @@ export function Filtros({ leads, filtrados, filtros, onChange, statusRealtime }:
                   />
                 </div>
                 <ChipGroup label="Convênio" dim="convenios" options={OPCOES.convenios} filtros={filtros} leads={leads} onChange={onChange} />
+                <ChipGroup
+                  label="Status da conversa (Chatwoot)"
+                  dim="statusConversa"
+                  options={OPCOES.statusConversa}
+                  filtros={filtros}
+                  leads={leads}
+                  onChange={onChange}
+                />
               </Secao>
 
               <Secao titulo="Perfil do lead">
@@ -568,9 +653,22 @@ export function Filtros({ leads, filtrados, filtros, onChange, statusRealtime }:
                     ]}
                   />
                 </div>
+                <div>
+                  <p className="text-sm text-content-secondary mb-1.5">Elegibilidade</p>
+                  <Segmented
+                    value={filtros.elegivel}
+                    onChange={(v) => onChange({ ...filtros, elegivel: v as FiltrosState['elegivel'] })}
+                    options={[
+                      { value: '', label: 'Todos' },
+                      { value: 'sim', label: 'Elegível' },
+                      { value: 'nao', label: 'Não' },
+                      { value: 'nao_avaliado', label: 'Sem avaliação' },
+                    ]}
+                  />
+                </div>
                 <ChipGroup label="Motivo do contato" dim="motivos" options={OPCOES.motivos} filtros={filtros} leads={leads} onChange={onChange} />
                 <ChipGroup label="Assunto" dim="assuntos" options={OPCOES.assuntos} filtros={filtros} leads={leads} onChange={onChange} />
-                <ChipGroup label="Tipo de contato" dim="tipos" options={OPCOES.tipos} filtros={filtros} leads={leads} onChange={onChange} />
+                <ChipGroup label="Perfil do contato" dim="tipos" options={tipoOpts} filtros={filtros} leads={leads} onChange={onChange} />
               </Secao>
 
               <Secao titulo="Origem & pessoas">
