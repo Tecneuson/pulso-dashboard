@@ -45,12 +45,17 @@ const estagioMap: Record<string, string> = Object.fromEntries(
 )
 
 /** Rótulo da etapa → slug canônico do banco (o inverso de ETAPA_TO_ESTAGIO). */
-const estagioLabelToSlug: Record<string, string> = Object.fromEntries(
-  FUNIL_ETAPAS.filter((e) => ETAPA_TO_ESTAGIO[e]).map((e) => [
-    FUNIL_ETAPA_LABELS[e],
-    ETAPA_TO_ESTAGIO[e] as string,
-  ])
-)
+const estagioLabelToSlug: Record<string, string> = {
+  ...Object.fromEntries(
+    FUNIL_ETAPAS.filter((e) => ETAPA_TO_ESTAGIO[e]).map((e) => [
+      FUNIL_ETAPA_LABELS[e],
+      ETAPA_TO_ESTAGIO[e] as string,
+    ])
+  ),
+  // Nomes antigos (renomeados em set/2026): conversas já marcadas continuam legíveis.
+  Rastreio: ETAPA_TO_ESTAGIO.elegivel as string,
+  'Internação': ETAPA_TO_ESTAGIO.internacao as string,
+}
 
 /** Rótulo da etapa "Contato" — no banco equivale a estagio_funil = null. */
 export const ETAPA_CONTATO_LABEL = FUNIL_ETAPA_LABELS.contato

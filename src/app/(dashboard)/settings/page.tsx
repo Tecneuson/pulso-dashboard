@@ -5,6 +5,7 @@ import { Cadastros } from '@/components/settings/cadastros'
 import { CamposPersonalizados } from '@/components/settings/campos-personalizados'
 import { CategoriasContato } from '@/components/settings/categorias-contato'
 import { requireGestor } from '@/lib/auth'
+import { FUNIL_ETAPA_LABELS } from '@/lib/funil-etapas'
 import { botAtivo, exigirDesfecho, n8nAtivo } from '@/lib/env'
 
 interface IntegrationProps {
@@ -170,8 +171,8 @@ export default async function SettingsPage() {
               ['Contato', 'bg-neutral-500'],
               ['Atendendo', 'bg-info-500'],
               ['Negociando', 'bg-warning-500'],
-              ['Rastreio', 'bg-brand-500'],
-              ['Internação', 'bg-success-500'],
+              [FUNIL_ETAPA_LABELS.elegivel, 'bg-brand-500'],
+              [FUNIL_ETAPA_LABELS.internacao, 'bg-success-500'],
               ['Perdido', 'bg-danger-500'],
             ].map(([label, color]) => (
               <div

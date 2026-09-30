@@ -59,7 +59,7 @@ Para reativar em QUALQUER encerramento, troque a condição do nó `Encerrou com
 Pulso atribuem conversas — se atribuíssem, brigariam com o Chatwoot pela mesma conversa.
 
 ## Regras de inatividade (encerramento automático)
-Contato 10 min · Atendendo 30 min · Negociando 30 min · **Rastreio nunca fecha**.
+Contato 10 min · Atendendo 30 min · Negociando 30 min · **Em Trânsito para Internação nunca fecha**.
 
 ## SQL
 - `hsm-ajustes-apresentacao.sql` — coluna `elegivel` em `triagem_hsm`.

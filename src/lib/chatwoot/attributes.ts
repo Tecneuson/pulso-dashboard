@@ -67,7 +67,14 @@ export interface AttributeDefinitionSpec {
   sistema?: boolean
 }
 
-export const ETAPAS_CHATWOOT = ['Contato', 'Atendendo', 'Negociando', 'Rastreio', 'Internação', 'Perdido']
+export const ETAPAS_CHATWOOT = [
+  'Contato',
+  'Atendendo',
+  'Negociando',
+  'Em Trânsito para Internação',
+  'Internação Confirmada',
+  'Perdido',
+]
 
 export const PLANOS_CHATWOOT = [
   'Alice',
