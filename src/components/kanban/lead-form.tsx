@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 import { FIELD_OPTIONS } from '@/lib/chatwoot/mapping'
 import { useCampos } from '@/lib/api-store'
 import { idadeEm, isKids } from '@/lib/idade'
@@ -222,12 +223,15 @@ export function LeadForm({ open, onClose, onCreated }: LeadFormProps) {
             value={form.forma_internacao}
             onChange={(e) => set('forma_internacao', e.target.value)}
           />
-          <Select
-            label="Plano de saúde"
-            options={withEmpty(FIELD_OPTIONS.plano_saude)}
-            value={form.plano_saude}
-            onChange={(e) => set('plano_saude', e.target.value)}
-          />
+          <div className="space-y-1.5">
+            <span className="block text-sm font-medium text-content-secondary">Plano de saúde</span>
+            <Combobox
+              options={FIELD_OPTIONS.plano_saude ?? []}
+              value={form.plano_saude || null}
+              onChange={(v) => set('plano_saude', v ?? '')}
+              placeholder="Buscar plano…"
+            />
+          </div>
         </div>
 
         <Select

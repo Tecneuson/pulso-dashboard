@@ -32,6 +32,7 @@ import { Modal } from '@/components/ui/modal'
 import { Badge, EtapaBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 import { FIELD_OPTIONS } from '@/lib/chatwoot/mapping'
 import { classificacaoMeta, formatDateBR, internacoesConhecidas } from '@/lib/funil'
 import {
@@ -52,6 +53,7 @@ import {
 import { OrigemFields, type OrigemValue } from './origem-fields'
 import { CategoriaContatoField, type ContatoValue } from './categoria-contato'
 import { ContatosDoCard } from './contatos-card'
+import { ResponsavelField } from '@/components/agenda/responsavel-field'
 
 interface CardDetailProps {
   triagem: LeadComEtapa | null
@@ -194,6 +196,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([])
   const [novaData, setNovaData] = useState('')
   const [novaNota, setNovaNota] = useState('')
+  const [novoResponsavel, setNovoResponsavel] = useState<string | null>(null)
   const [resolucao, setResolucao] = useState('')
   const [menuAcoes, setMenuAcoes] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -538,6 +541,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
           paciente_id: paciente?.id ?? null,
           data: novaData,
           nota: novaNota.trim() || null,
+          responsavel_id: novoResponsavel,
         }),
       })
       const data = await res.json()
@@ -545,6 +549,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
       setAgendamentos((prev) => [data.agendamento, ...prev])
       setNovaData('')
       setNovaNota('')
+      setNovoResponsavel(null)
       setPainel('none')
       dadosFunil.recarregarAgendamentos()
     } catch (e) {
@@ -552,6 +557,24 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
       setAcaoErro(e instanceof Error ? e.message : 'Falha ao agendar contato')
     } finally {
       setAcaoLoading(false)
+    }
+  }
+
+  async function reatribuirAgendamento(id: string, responsavelId: string | null) {
+    setAcaoErro(null)
+    try {
+      const res = await fetch('/api/agendamentos', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, responsavel_id: responsavelId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'erro')
+      setAgendamentos((prev) => prev.map((a) => (a.id === id ? data.agendamento : a)))
+      dadosFunil.recarregarAgendamentos()
+    } catch (e) {
+      console.error('Falha ao reatribuir lembrete:', e)
+      setAcaoErro(e instanceof Error ? e.message : 'Falha ao reatribuir')
     }
   }
 
@@ -663,7 +686,9 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
         data: formatDataBR(a.data),
         agente: dadosFunil.nomeAgente(a.criado_por) ?? 'Equipe',
         tipo: 'anotacao',
-        desfecho: 'Próximo contato',
+        desfecho: a.responsavel_id && a.responsavel_id !== a.criado_por
+          ? `Próximo contato → ${dadosFunil.nomeAgente(a.responsavel_id) ?? 'equipe'}`
+          : 'Próximo contato',
         nota: a.nota ?? undefined,
       },
     ]
@@ -891,6 +916,10 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
                   onChange={(e) => setNovaData(e.target.value)}
                   className="h-10 rounded bg-surface-tertiary border border-border text-sm px-3 text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
                 />
+              </div>
+              <div className="min-w-[200px]">
+                <p className="text-overline uppercase text-content-tertiary mb-1">Responsável</p>
+                <ResponsavelField value={novoResponsavel} onChange={setNovoResponsavel} />
               </div>
               <div className="flex-1 min-w-[200px]">
                 <p className="text-overline uppercase text-content-tertiary mb-1">Nota</p>
@@ -1127,7 +1156,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
                   <Select options={withEmpty(FORMA_OPTIONS)} value={form.forma_internacao} onChange={(e) => set('forma_internacao', e.target.value)} />
                 </Field>
                 <Field label="Plano de saúde">
-                  <Select options={withEmpty(FIELD_OPTIONS.plano_saude)} value={form.plano_saude} onChange={(e) => set('plano_saude', e.target.value)} />
+                  <Combobox options={FIELD_OPTIONS.plano_saude ?? []} value={form.plano_saude || null} onChange={(v) => set('plano_saude', v ?? '')} placeholder="Buscar plano…" />
                 </Field>
                 {/* "Observações" saiu do card: use Ações → Adicionar Nota (histórico ⇄ notas do Chatwoot). */}
               </>
@@ -1204,6 +1233,17 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
 
               {proximoContato?.nota && (
                 <p className="text-sm text-content-secondary mt-1.5">{proximoContato.nota}</p>
+              )}
+
+              {proximoContato && (
+                <div className="mt-2">
+                  <p className="text-overline uppercase text-content-tertiary mb-1">Responsável</p>
+                  <ResponsavelField
+                    value={proximoContato.responsavel_id ?? null}
+                    onChange={(id) => reatribuirAgendamento(proximoContato.id, id)}
+                    placeholder="Sem responsável"
+                  />
+                </div>
               )}
 
               {proximoContato && (

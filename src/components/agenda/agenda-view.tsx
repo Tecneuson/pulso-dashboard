@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Loader2, Plus, X } from 'lucide-react'
 import { Header } from '@/components/layout/header'
-import { Button } from '@/components/ui'
+import { Button, Combobox } from '@/components/ui'
+import { useUsuarios } from '@/lib/api-store'
+import { ResponsavelField } from './responsavel-field'
 import type { Agendamento } from '@/types'
 import {
   formatDataBR,
@@ -99,11 +101,16 @@ function ItemAgenda({
   ag,
   onResolver,
   onRemover,
+  onReatribuir,
+  responsavelNome,
   variante = 'lista',
 }: {
   ag: Agendamento
   onResolver?: (id: string, status: 'contatado' | 'nao_contatado' | 'concluido') => void
   onRemover?: (id: string) => void
+  onReatribuir?: (id: string, responsavelId: string | null) => void
+  /** Nome de quem é responsável pela tarefa (null = sem responsável). */
+  responsavelNome?: string | null
   /** lista = visão Dia (card completo) · semana = coluna estreita · mes = uma linha */
   variante?: 'lista' | 'semana' | 'mes'
 }) {
@@ -158,6 +165,9 @@ function ItemAgenda({
         </p>
         {ag.nota && (
           <p className="text-[11px] text-content-secondary mt-0.5 break-words">{ag.nota}</p>
+        )}
+        {responsavelNome && (
+          <p className="text-[10px] text-content-tertiary mt-0.5 truncate">→ {responsavelNome}</p>
         )}
 
         {!resolvido && onResolver && (
@@ -231,6 +241,19 @@ function ItemAgenda({
           {ag.resultado_nota && (
             <p className="text-[13px] text-content-tertiary mt-0.5">↳ {ag.resultado_nota}</p>
           )}
+          {onReatribuir ? (
+            <div className="mt-2 max-w-xs">
+              <ResponsavelField
+                value={ag.responsavel_id ?? null}
+                onChange={(id) => onReatribuir(ag.id, id)}
+                placeholder="Sem responsável"
+              />
+            </div>
+          ) : (
+            responsavelNome && (
+              <p className="text-[12px] text-content-tertiary mt-0.5">Responsável: {responsavelNome}</p>
+            )
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -277,12 +300,16 @@ export function AgendaView() {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
+  /** Filtro por responsável: '' = todos. */
+  const [filtroResp, setFiltroResp] = useState<string | null>(null)
+  const { items: usuarios, porId: nomeUsuario } = useUsuarios()
 
   const [novoAberto, setNovoAberto] = useState(false)
   const [novoTitulo, setNovoTitulo] = useState('')
   const [novaData, setNovaData] = useState(hojeISO())
   const [novaHora, setNovaHora] = useState('')
   const [novaNota, setNovaNota] = useState('')
+  const [novoResp, setNovoResp] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
 
   const { de, ate } = useMemo(() => intervalo(modo, ref), [modo, ref])
@@ -310,6 +337,7 @@ export function AgendaView() {
     const q = busca.trim().toLowerCase()
     const map = new Map<string, Agendamento[]>()
     for (const a of rows) {
+      if (filtroResp && a.responsavel_id !== filtroResp) continue
       if (q) {
         const alvo = `${a.titulo ?? ''} ${a.alvo_nome ?? ''} ${a.nota ?? ''}`.toLowerCase()
         if (!alvo.includes(q)) continue
@@ -320,7 +348,7 @@ export function AgendaView() {
     }
     map.forEach((lista) => lista.sort(ordenarPorDataHora))
     return map
-  }, [rows, busca])
+  }, [rows, busca, filtroResp])
 
   const dias = useMemo(() => {
     const out: string[] = []
@@ -349,6 +377,20 @@ export function AgendaView() {
     if (res.ok) setRows((prev) => prev.filter((a) => a.id !== id))
   }
 
+  async function reatribuir(id: string, responsavelId: string | null) {
+    const res = await fetch('/api/agendamentos', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, responsavel_id: responsavelId }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setRows((prev) => prev.map((a) => (a.id === id ? data.agendamento : a)))
+    }
+  }
+
+  const nomeResp = (a: Agendamento) => (a.responsavel_id ? nomeUsuario.get(a.responsavel_id) ?? null : null)
+
   async function criarEvento() {
     if (!novoTitulo.trim() || !novaData) return
     setSalvando(true)
@@ -362,10 +404,12 @@ export function AgendaView() {
           data: novaData,
           hora: novaHora || null,
           nota: novaNota.trim() || null,
+          responsavel_id: novoResp,
         }),
       })
       if (res.ok) {
         setNovoTitulo('')
+        setNovoResp(null)
         setNovaHora('')
         setNovaNota('')
         setNovoAberto(false)
@@ -436,6 +480,10 @@ export function AgendaView() {
               className={`${inputCls} w-full`}
             />
           </div>
+          <div className="min-w-[200px]">
+            <p className="text-xs text-content-secondary mb-1">Responsável</p>
+            <ResponsavelField value={novoResp} onChange={setNovoResp} />
+          </div>
           <Button variant="ghost" size="sm" onClick={() => setNovoAberto(false)}>
             Cancelar
           </Button>
@@ -479,6 +527,16 @@ export function AgendaView() {
 
         {loading && <Loader2 size={14} className="animate-spin text-content-tertiary" />}
 
+        <div className="w-56">
+          <Combobox
+            options={usuarios.map((u) => ({ value: u.id, label: u.nome }))}
+            value={filtroResp}
+            onChange={setFiltroResp}
+            placeholder="Todos os responsáveis"
+            textoVazio="Todos os responsáveis"
+          />
+        </div>
+
         <div className="ml-auto inline-flex items-center gap-0.5 p-0.5 rounded-full bg-surface-secondary border border-border">
           {(['dia', 'semana', 'mes'] as const).map((m) => (
             <button
@@ -507,7 +565,14 @@ export function AgendaView() {
       {modo === 'dia' && (
         <div className="space-y-2 max-w-3xl">
           {(porDia.get(ref) ?? []).map((a) => (
-            <ItemAgenda key={a.id} ag={a} onResolver={resolver} onRemover={remover} />
+            <ItemAgenda
+              key={a.id}
+              ag={a}
+              onResolver={resolver}
+              onRemover={remover}
+              onReatribuir={reatribuir}
+              responsavelNome={nomeResp(a)}
+            />
           ))}
           {(porDia.get(ref) ?? []).length === 0 && !loading && (
             <p className="text-sm text-content-tertiary py-8 text-center">
@@ -543,7 +608,13 @@ export function AgendaView() {
                 </div>
                 <div className="space-y-1.5">
                   {itens.map((a) => (
-                    <ItemAgenda key={a.id} ag={a} onResolver={resolver} variante="semana" />
+                    <ItemAgenda
+                      key={a.id}
+                      ag={a}
+                      onResolver={resolver}
+                      responsavelNome={nomeResp(a)}
+                      variante="semana"
+                    />
                   ))}
                 </div>
               </div>

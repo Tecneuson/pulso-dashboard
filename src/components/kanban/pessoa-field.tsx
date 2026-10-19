@@ -1,5 +1,6 @@
 'use client'
 
+import { useEhAdmin } from '@/components/layout/papel'
 import { useState } from 'react'
 import { Check, Loader2, X } from 'lucide-react'
 import { Combobox, type ComboboxOption } from '@/components/ui'
@@ -54,6 +55,7 @@ export function PessoaField({
   descricao?: string
 }) {
   const [cadastrando, setCadastrando] = useState(false)
+  const admin = useEhAdmin()
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [form, setForm] = useState({ nome: '', telefone: '', email: '', cpf: '' })
@@ -108,7 +110,7 @@ export function PessoaField({
     <div>
       <div className="flex items-center justify-between mb-1">
         <p className="text-overline uppercase text-content-tertiary">{label}</p>
-        {!cadastrando && (
+        {!cadastrando && admin && (
           <button
             type="button"
             onClick={() => setCadastrando(true)}
@@ -183,7 +185,7 @@ export function PessoaField({
             onChange={onChange}
             placeholder={placeholder}
             textoVazio="— sem vínculo —"
-            onCriar={() => setCadastrando(true)}
+            onCriar={admin ? () => setCadastrando(true) : undefined}
             criarLabel="Cadastrar novo"
           />
           {selecionado ? (

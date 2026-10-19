@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui'
 import { Cadastros } from '@/components/settings/cadastros'
 import { CamposPersonalizados } from '@/components/settings/campos-personalizados'
 import { CategoriasContato } from '@/components/settings/categorias-contato'
+import { Usuarios } from '@/components/settings/usuarios'
 import { requireGestor } from '@/lib/auth'
 import { FUNIL_ETAPA_LABELS } from '@/lib/funil-etapas'
 import { botAtivo, exigirDesfecho, n8nAtivo } from '@/lib/env'
@@ -186,6 +187,10 @@ export default async function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="mt-4">
+        <Usuarios />
+      </div>
 
       <div className="mt-4">
         <CategoriasContato />

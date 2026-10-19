@@ -13,12 +13,10 @@ import {
   assuntoDistribution,
 } from '@/lib/metrics'
 import type { Triagem } from '@/types'
-import { requireGestor } from '@/lib/auth'
 
 export const revalidate = 0
 
 export default async function DashboardPage() {
-  await requireGestor()
   const supabase = await createClient()
   const { data } = await supabase
     .from('triagem_hsm')

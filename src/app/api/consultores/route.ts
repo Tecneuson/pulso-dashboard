@@ -46,7 +46,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { supabase, error } = await requireUserApi()
+  const { supabase, error } = await requireUserApi({ gestor: true })
   if (error) return error
 
   const parsed = pessoaCreateSchema.safeParse(await request.json().catch(() => null))
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const { supabase, error } = await requireUserApi()
+  const { supabase, error } = await requireUserApi({ gestor: true })
   if (error) return error
 
   const parsed = pessoaPatchSchema.safeParse(await request.json().catch(() => null))
@@ -97,7 +97,7 @@ export async function PATCH(request: NextRequest) {
  * vinculados perderiam a referência do consultor que os encaminhou.
  */
 export async function DELETE(request: NextRequest) {
-  const { supabase, error } = await requireUserApi()
+  const { supabase, error } = await requireUserApi({ gestor: true })
   if (error) return error
   const id = request.nextUrl.searchParams.get('id')
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })

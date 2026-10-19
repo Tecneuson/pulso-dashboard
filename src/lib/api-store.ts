@@ -248,7 +248,7 @@ export function useUsuarios() {
     usuariosCol.getServerSnapshot
   )
   const porId = useMemo(() => new Map(items.map((u) => [u.id, u.nome])), [items])
-  return { items, porId }
+  return { items, porId, refresh: () => usuariosCol.load() }
 }
 
 /**

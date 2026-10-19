@@ -57,12 +57,14 @@ export async function GET(request: NextRequest) {
   const de = sp.get('de')
   const ate = sp.get('ate')
   const status = sp.get('status')
+  const responsavelId = sp.get('responsavel_id')
   const limit = Math.min(Number(sp.get('limit')) || 500, 1000)
 
   let query = supabase.from('agendamentos').select(SELECT)
 
   if (triagemId) query = query.eq('triagem_id', triagemId)
   if (pacienteId) query = query.eq('paciente_id', pacienteId)
+  if (isUuid(responsavelId)) query = query.eq('responsavel_id', responsavelId)
   if (de) query = query.gte('data', de)
   if (ate) query = query.lte('data', ate)
 
@@ -158,6 +160,13 @@ export async function PATCH(request: NextRequest) {
   if ('hora' in body) patch.hora = body.hora || null
   if ('nota' in body) patch.nota = typeof body.nota === 'string' ? body.nota.trim() || null : null
   if ('titulo' in body) patch.titulo = typeof body.titulo === 'string' ? body.titulo.trim() || null : null
+  // Reatribuir: qualquer pessoa da equipe pode passar a tarefa para outra (null = sem responsável).
+  if ('responsavel_id' in body) {
+    if (body.responsavel_id !== null && !isUuid(body.responsavel_id)) {
+      return NextResponse.json({ error: 'responsavel_id inválido' }, { status: 400 })
+    }
+    patch.responsavel_id = body.responsavel_id
+  }
   if ('resultado_nota' in body) {
     patch.resultado_nota =
       typeof body.resultado_nota === 'string' ? body.resultado_nota.trim() || null : null

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { Sidebar } from '@/components/layout/sidebar'
+import { PapelProvider } from '@/components/layout/papel'
 import { createClient } from '@/lib/supabase/server'
 import type { DashboardUser } from '@/types'
 
@@ -35,7 +36,9 @@ export default async function DashboardLayout({
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar user={dashboardUser} />
-      <main className="flex-1 overflow-y-auto p-6 lg:p-8">{children}</main>
+      <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <PapelProvider admin={dashboardUser.role === 'admin'}>{children}</PapelProvider>
+      </main>
     </div>
   )
 }

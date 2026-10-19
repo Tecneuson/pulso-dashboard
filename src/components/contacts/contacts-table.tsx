@@ -1,8 +1,9 @@
 'use client'
 
+import { useEhAdmin } from '@/components/layout/papel'
 import { useEffect, useMemo, useState } from 'react'
 import { Search, Download, Phone, Mail } from 'lucide-react'
-import { Input, Select, Button, EtapaBadge } from '@/components/ui'
+import { Input, Select, Combobox, Button, EtapaBadge } from '@/components/ui'
 import { CardDetail } from '@/components/kanban/card-detail'
 import type { Triagem, TriagemLead } from '@/types'
 import { ASSUNTO_LABELS, MOTIVO_CONTATO, MOTIVO_CONTATO_LABELS } from '@/types'
@@ -63,6 +64,7 @@ interface ContactsTableProps {
 export function ContactsTable({ triagens, initialSearch = '' }: ContactsTableProps) {
   const labelPerfil = useLabelPerfil()
   const [search, setSearch] = useState(initialSearch)
+  const admin = useEhAdmin()
   const [stage, setStage] = useState<string>('')
   const [plano, setPlano] = useState<string>('')
   const [motivo, setMotivo] = useState<string>('')
@@ -124,13 +126,12 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
           onChange={(e) => setStage(e.target.value)}
           options={[{ value: '', label: 'Todas as etapas' }, ...FUNIL_ETAPA_OPTIONS]}
         />
-        <Select
-          value={plano}
-          onChange={(e) => setPlano(e.target.value)}
-          options={[
-            { value: '', label: 'Todos os convênios' },
-            ...CONVENIO_FILTRO.flatMap((c) => c.leadSlugs.map((v) => ({ value: v, label: c.label }))),
-          ]}
+        <Combobox
+          value={plano || null}
+          onChange={(v) => setPlano(v ?? '')}
+          placeholder="Todos os convênios"
+          textoVazio="Todos os convênios"
+          options={CONVENIO_FILTRO.flatMap((c) => c.leadSlugs.map((v) => ({ value: v, label: c.label })))}
         />
         <Select
           value={motivo}
@@ -140,10 +141,12 @@ export function ContactsTable({ triagens, initialSearch = '' }: ContactsTablePro
             ...MOTIVO_CONTATO.map((v) => ({ value: v, label: motivoLabels[v] })),
           ]}
         />
-        <Button variant="secondary" size="md" onClick={handleExport}>
-          <Download size={14} />
-          CSV
-        </Button>
+        {admin && (
+          <Button variant="secondary" size="md" onClick={handleExport}>
+            <Download size={14} />
+            CSV
+          </Button>
+        )}
       </div>
 
       <div className="text-xs text-content-tertiary mb-2 tabular-nums">

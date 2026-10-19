@@ -14,10 +14,12 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  KeyRound,
   Activity,
 } from 'lucide-react'
 import type { DashboardUser } from '@/types'
 import { createClient } from '@/lib/supabase/client'
+import { TrocarSenha } from './trocar-senha'
 
 const navSections = [
   {
@@ -31,7 +33,6 @@ const navSections = [
   },
   {
     label: 'Análise',
-    adminOnly: true,
     items: [
       { href: '/dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
       { href: '/reports' as const, label: 'Relatórios', icon: BarChart3 },
@@ -50,6 +51,7 @@ interface SidebarProps {
 
 export function Sidebar({ user }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
+  const [trocandoSenha, setTrocandoSenha] = useState(false)
   const pathname = usePathname()
 
   useEffect(() => {
@@ -166,10 +168,20 @@ export function Sidebar({ user }: SidebarProps) {
               <p className="text-sm font-medium text-sidebar-text-active truncate">
                 {user?.name ?? 'Usuário'}
               </p>
-              <p className="text-[11px] text-sidebar-text truncate capitalize">
-                {user?.role ?? 'viewer'}
+              <p className="text-[11px] text-sidebar-text truncate">
+                {user?.role === 'admin' ? 'Admin' : 'Agente de atendimento'}
               </p>
             </div>
+          )}
+          {!collapsed && (
+            <button
+              onClick={() => setTrocandoSenha(true)}
+              className="focus-ring p-1.5 rounded hover:bg-sidebar-hover text-sidebar-text transition-colors"
+              title="Trocar senha"
+              aria-label="Trocar senha"
+            >
+              <KeyRound size={14} />
+            </button>
           )}
           {!collapsed && (
             <button
@@ -183,6 +195,7 @@ export function Sidebar({ user }: SidebarProps) {
           )}
         </div>
       </div>
+      <TrocarSenha open={trocandoSenha} onClose={() => setTrocandoSenha(false)} email={user?.email ?? ''} />
     </aside>
   )
 }

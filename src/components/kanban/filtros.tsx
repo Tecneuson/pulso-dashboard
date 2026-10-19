@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { SlidersHorizontal, X } from 'lucide-react'
-import { Button } from '@/components/ui'
+import { Button, Combobox } from '@/components/ui'
 import { FUNIL_ETAPA_VAR, type LeadComEtapa } from '@/lib/funil-etapas'
 import { useCategoriasContato, useConsultores, useHospitais, useUsuarios } from '@/lib/api-store'
 import { AGENDADOS_FILTRO_OPTS } from '@/lib/agendamentos'
@@ -95,15 +95,33 @@ function CampoDimensao({
   options,
   filtros,
   onChange,
+  buscavel = false,
 }: {
   label: string
   dim: keyof FiltrosState
   options: Opt[]
   filtros: FiltrosState
   onChange: (f: FiltrosState) => void
+  /** Lista longa (ex.: planos): usa o Combobox com busca no lugar do select nativo. */
+  buscavel?: boolean
 }) {
   const selecionados = filtros[dim] as string[]
   const varios = selecionados.length > 1
+
+  if (buscavel) {
+    return (
+      <div className="block min-w-0">
+        <span className="block text-xs text-content-secondary mb-1 truncate">{label}</span>
+        <Combobox
+          options={options}
+          value={varios ? null : selecionados[0] ?? null}
+          onChange={(v) => onChange({ ...filtros, [dim]: v ? [v] : [] })}
+          placeholder={varios ? `Vários (${selecionados.length})` : 'Todos'}
+          textoVazio="Todos"
+        />
+      </div>
+    )
+  }
 
   return (
     <label className="block min-w-0">
@@ -485,6 +503,7 @@ export function Filtros({ leads, filtrados, filtros, onChange, statusRealtime }:
             options={OPCOES.convenios}
             filtros={filtros}
             onChange={onChange}
+            buscavel
           />
           <label className="block min-w-0">
             <span className="block text-xs text-content-secondary mb-1 truncate">Ordenar</span>

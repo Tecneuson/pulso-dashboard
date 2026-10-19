@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireUserApi } from '@/lib/auth'
 
 async function requireUser() {
   const supabase = await createClient()
@@ -7,6 +8,12 @@ async function requireUser() {
     data: { user },
   } = await supabase.auth.getUser()
   return { supabase, user }
+}
+
+/** Cadastro é coisa de admin: agente de atendimento só consulta. */
+async function requireAdmin() {
+  const { supabase, user, error } = await requireUserApi({ gestor: true })
+  return { supabase, user, error }
 }
 
 export async function GET() {
@@ -23,8 +30,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { supabase, user } = await requireUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { supabase, error: negado } = await requireAdmin()
+  if (negado) return negado
 
   const body = await request.json().catch(() => null)
   const nome = typeof body?.nome === 'string' ? body.nome.trim() : ''
@@ -47,8 +54,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const { supabase, user } = await requireUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { supabase, error: negado } = await requireAdmin()
+  if (negado) return negado
 
   const body = await request.json().catch(() => null)
   const id: string | undefined = body?.id
@@ -71,8 +78,8 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const { supabase, user } = await requireUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { supabase, error: negado } = await requireAdmin()
+  if (negado) return negado
 
   const id = request.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })

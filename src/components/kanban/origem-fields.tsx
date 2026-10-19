@@ -1,5 +1,6 @@
 'use client'
 
+import { useEhAdmin } from '@/components/layout/papel'
 import { useState } from 'react'
 import { Check, X } from 'lucide-react'
 import { Combobox, Select, type ComboboxOption } from '@/components/ui'
@@ -91,6 +92,7 @@ export function OrigemFields({
   const consultores = useConsultores()
   const hospitais = useHospitais()
   const [addingHospital, setAddingHospital] = useState(false)
+  const admin = useEhAdmin()
 
   const hospitalOpts: ComboboxOption[] = hospitais.items
     .filter((h) => h.ativo || h.id === value.origem_hospital_id)
@@ -121,7 +123,7 @@ export function OrigemFields({
         <div>
           <div className="flex items-center justify-between mb-1">
             <p className="text-overline uppercase text-content-tertiary">Hospital</p>
-            {!addingHospital && (
+            {!addingHospital && admin && (
               <button
                 type="button"
                 className="text-xs text-brand-500 hover:text-brand-400"
@@ -147,7 +149,7 @@ export function OrigemFields({
               onChange={(id) => onChange({ origem_hospital_id: id })}
               placeholder="Buscar hospital…"
               textoVazio="— sem hospital —"
-              onCriar={() => setAddingHospital(true)}
+              onCriar={admin ? () => setAddingHospital(true) : undefined}
               criarLabel="Cadastrar hospital"
             />
           )}
