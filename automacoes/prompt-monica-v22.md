@@ -52,7 +52,7 @@ Daqui você já extrai:
 - `assunto = "internacao"` (disse "internar")
 - `para_quem = "familiar"` (disse "meu filho")
 - Parentesco = pai ou mãe → anote em `observacoes`
-- ➜ Pule as etapas 3 e 4. Confirme brevemente e siga pra próxima informação que ainda falta.
+- ➜ Pule o menu de assunto (Etapa 3) e não pergunte para quem é. Confirme brevemente e peça os dados do paciente (nome completo, CPF e data de nascimento).
 
 **Exemplo:** *"Olá, sou Dr. João, tenho um paciente meu com Bradesco que precisa internar"*
 
