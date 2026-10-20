@@ -211,6 +211,8 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
       phone: triagem.phone ?? '',
       email: triagem.email ?? '',
       data_nascimento: triagem.data_nascimento ?? '',
+      cpf: triagem.cpf ? formatarCpf(triagem.cpf) : '',
+      nome_contato: triagem.nome_contato ?? '',
       elegivel: triagem.elegivel == null ? '' : triagem.elegivel ? 'sim' : 'nao',
       assunto: triagem.assunto ?? '',
       motivo_contato: triagem.motivo_contato ?? '',
@@ -404,6 +406,13 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
       // Origem é dimensão própria: guarda o consultor QUE ENCAMINHOU, que pode ser
       // outro que não o de `contato.consultor_id` (quem está falando agora).
       ...origem,
+    }
+    // CPF só quando mudou: um CPF antigo fora do padrão não pode travar o salvamento.
+    const cpfNovo = form.cpf.replace(/\D/g, '') || null
+    if (cpfNovo !== (triagem.cpf?.replace(/\D/g, '') || null)) payload.cpf = cpfNovo
+    // Só manda nome_contato quando mudou (coluna nova da triagem v22).
+    if ((form.nome_contato.trim() || null) !== (triagem.nome_contato ?? null)) {
+      payload.nome_contato = form.nome_contato.trim() || null
     }
     // Só grava estagio_funil se a etapa realmente mudou (preserva a nuance granular).
     if (form.etapa !== triagem.etapa) {
@@ -1084,6 +1093,27 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
                   value={form.email}
                   onChange={(e) => set('email', e.target.value)}
                   placeholder="email@exemplo.com"
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Nome do contato (quem falou)">
+                <input
+                  value={form.nome_contato}
+                  onChange={(e) => set('nome_contato', e.target.value)}
+                  placeholder="Quem conversou com o hospital"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="CPF do paciente">
+                <input
+                  value={form.cpf}
+                  onChange={(e) => set('cpf', e.target.value)}
+                  onBlur={(e) => set('cpf', formatarCpf(e.target.value) || e.target.value)}
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
                   className={inputCls}
                 />
               </Field>

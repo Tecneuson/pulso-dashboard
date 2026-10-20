@@ -7,7 +7,9 @@ conversarem entre si. Versionados aqui porque o n8n não tem histórico próprio
 
 | Arquivo | O que é |
 |---|---|
-| `Chatwoot Moniquinha — HSM (v20) — FINAL.json` | **VERSÃO A COLAR.** O n8n fica com o bot e com o CICLO DE VIDA dele (pausar no fim da triagem, reativar ao encerrar). Sai a escrita de atributos no Chatwoot — isso é do Pulso agora. Caminhos: `hsm-receber-mensagens`, `hsm-agente-humano`, `hsm-chatwoot`. |
+| `Chatwoot Moniquinha — HSM (v22) — triagem enxuta.json` | **VERSÃO A COLAR (out/2026).** Prompt v22 (triagem enxuta: só internação é triada; perfil deduzido; plano obrigatório; carteirinha frente e verso), `salvar_triagem` grava `nome_contato`, leitura da carteirinha extrai todos os dados e cada foto vira nota privada no Chatwoot. **Antes de importar, rode `supabase/migrations/20261020000000_nome_contato.sql`** — sem a coluna o `salvar_triagem` falha. |
+| `prompt-monica-v22.md` | Fonte única do prompt atual (o mesmo texto vai para `src/lib/bot/prompt-monica.json`). |
+| `Chatwoot Moniquinha — HSM (v20) — FINAL.json` | Versão anterior (v21 = v20 + ignora e-mail). O n8n fica com o bot e com o CICLO DE VIDA dele (pausar no fim da triagem, reativar ao encerrar). Sai a escrita de atributos no Chatwoot — isso é do Pulso agora. Caminhos: `hsm-receber-mensagens`, `hsm-agente-humano`, `hsm-chatwoot`. |
 | `prompt-monica-v17.md` | Fonte única do prompt da Mônica (o mesmo texto vai para `src/lib/bot/prompt-monica.json`, usado pelo bot interno do app). |
 | `Chatwoot Moniquinha — HSM (v15).json` | Versão em produção até a troca. |
 | `Chatwoot Moniquinha — HSM (v11..v14).json` | Histórico das correções (ver abaixo). |
@@ -21,6 +23,7 @@ conversarem entre si. Versionados aqui porque o n8n não tem histórico próprio
 - **v13** — nota e pausa disparam só na TRANSIÇÃO (`old_record` vs `record`), matando o loop de eco que spammava notas.
 - **v14** — atualização de atributos da conversa passa a MESCLAR (o endpoint do Chatwoot substitui o objeto inteiro e apagava `bot_pausado`/`assunto_da_conversa`).
 - **v15** — mapa de `motivo_contato` atualizado para TM/TUS; `toLabel` nunca manda slug cru para campos de lista.
+- **v22** — triagem enxuta pedida pelo hospital (ver prompt v22) + `nome_contato` + nota com os dados da carteirinha.
 - **v16** — prompt v16 (menu enxuto, transbordo só ao fim, perfis Lead/Ex-paciente/Responsável/Médico/Consultor); `Snake to Label` com os 30 motivos de perda oficiais; `salvar_triagem` aceita `paciente|responsavel|consultor`; `Snake to Label` traduz as categorias novas (e as antigas, por segurança); o webhook `/chatwoot` passa a filtrar pela conversa (`body.id`) — no v15 usava o id do contato e não achava a linha.
 
 ## Quando o bot volta a atender (novo ciclo)

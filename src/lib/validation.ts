@@ -58,6 +58,11 @@ export const triagemPatchSchema = z
     motivo_desqualificacao: textoCurto.nullable(),
     paciente_id: nullableUuid,
     contact_name: z.preprocess((v) => (v === '' ? null : v), textoCurto.nullable()),
+    nome_contato: z.preprocess((v) => (v === '' ? null : v), textoCurto.nullable()),
+    cpf: z.preprocess(
+      (v) => (typeof v === 'string' ? v.replace(/\D/g, '') || null : v),
+      z.string().regex(/^\d{11}$/, 'CPF precisa ter 11 dígitos').nullable()
+    ),
     data_nascimento: z.preprocess((v) => (v === '' ? null : v), dataISO),
     elegivel: z.boolean().nullable(),
     phone: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(40).nullable()),

@@ -297,6 +297,8 @@ export interface Triagem {
   tags: string[] | null
   paciente_id: string | null
   cpf: string | null
+  /** Quem conversou com o bot (interlocutor). O paciente fica em contact_name. */
+  nome_contato?: string | null
   data_nascimento: string | null
   /** Elegibilidade do contato (avaliada na conversa): true = Sim, false = Não, null = não avaliado. */
   elegivel: boolean | null
