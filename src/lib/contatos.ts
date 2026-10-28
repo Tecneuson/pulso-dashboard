@@ -46,19 +46,18 @@ export interface PessoaIdentificada {
 }
 
 /**
- * Quem é esta pessoa? Consultor cadastrado tem prioridade (a lista deles é
- * fechada e veio do formulário); qualquer outro número vira responsável.
+ * Quem é esta pessoa, só consultando (não cria nada)? Consultor cadastrado tem
+ * prioridade (a lista deles é fechada e veio do formulário); depois, responsável.
  */
-export async function identificarPessoa(
-  admin: SupabaseClient,
-  telefoneBruto: string | null | undefined,
-  nomeWhatsapp: string | null | undefined
+export async function acharPessoa(
+  client: SupabaseClient,
+  telefoneBruto: string | null | undefined
 ): Promise<PessoaIdentificada | null> {
   const tel = normalizarTelefone(telefoneBruto)
   if (!tel) return null
   const variantes = variantesTelefone(tel)
 
-  const { data: consultores } = await admin
+  const { data: consultores } = await client
     .from('consultores')
     .select('id, nome, telefones')
     .overlaps('telefones', variantes)
@@ -68,7 +67,7 @@ export async function identificarPessoa(
     return { papel: 'consultor', id: c.id, nome: c.nome, novo: false }
   }
 
-  const { data: responsaveis } = await admin
+  const { data: responsaveis } = await client
     .from('responsaveis')
     .select('id, nome, telefones')
     .overlaps('telefones', variantes)
@@ -77,6 +76,22 @@ export async function identificarPessoa(
     const r = responsaveis[0] as AnyObj
     return { papel: 'responsavel', id: r.id, nome: r.nome, novo: false }
   }
+  return null
+}
+
+/**
+ * Quem é esta pessoa? Se ninguém tem este telefone, qualquer número vira responsável
+ * (ficha criada com o nome do WhatsApp).
+ */
+export async function identificarPessoa(
+  admin: SupabaseClient,
+  telefoneBruto: string | null | undefined,
+  nomeWhatsapp: string | null | undefined
+): Promise<PessoaIdentificada | null> {
+  const tel = normalizarTelefone(telefoneBruto)
+  if (!tel) return null
+  const conhecida = await acharPessoa(admin, tel)
+  if (conhecida) return conhecida
 
   // Ninguém conhecido: cria a ficha do responsável com o que o WhatsApp entrega.
   const nome = (nomeWhatsapp ?? '').trim() || `Contato ${tel}`

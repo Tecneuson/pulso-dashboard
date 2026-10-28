@@ -1,5 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { normalizarTelefone, registrarNoHistorico, variantesTelefone } from '@/lib/contatos'
+import {
+  acharPessoa,
+  identificarPessoa,
+  normalizarTelefone,
+  registrarNoHistorico,
+  variantesTelefone,
+  vincularAoCard,
+  type PessoaIdentificada,
+} from '@/lib/contatos'
+import { PACIENTE_RESUMO_FIELDS } from '@/types'
 import { etapaFromEstagio } from '@/lib/funil-etapas'
 import type { AnyObj } from '@/lib/triagem-db'
 
@@ -221,4 +230,136 @@ async function moverDependentes(admin: SupabaseClient, de: string, para: string)
       await admin.from('contato_vinculos').delete().eq('id', v.id)
     }
   }
+}
+
+// ============================================================
+// Pacientes de quem está falando (abas do card dentro do Chatwoot)
+// ============================================================
+
+/**
+ * A mesma pessoa (consultor, responsável) fala de vários pacientes. Pelo telefone da
+ * conversa achamos a pessoa (sem criar nada) e os cards a que ela está vinculada; o
+ * card da conversa vem primeiro.
+ */
+export async function pacientesDoContato(
+  client: SupabaseClient,
+  telefone: string | null | undefined,
+  convId: string | null | undefined
+): Promise<{ pessoa: PessoaIdentificada | null; cards: AnyObj[] }> {
+  const pessoa = await acharPessoa(client, telefone)
+  const ids = new Set<string>()
+  if (pessoa) {
+    const coluna = pessoa.papel === 'responsavel' ? 'responsavel_id' : 'consultor_id'
+    const { data: vinculos } = await client.from('contato_vinculos').select('triagem_id').eq(coluna, pessoa.id)
+    for (const v of (vinculos ?? []) as AnyObj[]) if (v.triagem_id) ids.add(v.triagem_id as string)
+  }
+
+  const cards: AnyObj[] = []
+  if (ids.size) {
+    const { data } = await client.from('triagem_hsm').select('*').in('id', Array.from(ids))
+    cards.push(...((data ?? []) as AnyObj[]))
+  }
+  if (convId && !cards.some((c) => String(c.conversation_id) === String(convId))) {
+    const { data } = await client.from('triagem_hsm').select('*').eq('conversation_id', String(convId)).maybeSingle()
+    if (data) cards.push(data as AnyObj)
+  }
+
+  const pacienteIds = Array.from(new Set(cards.map((c) => c.paciente_id).filter(Boolean)))
+  if (pacienteIds.length) {
+    const { data } = await client.from('pacientes').select(PACIENTE_RESUMO_FIELDS).in('id', pacienteIds)
+    const porId = new Map(((data ?? []) as AnyObj[]).map((p) => [p.id, p]))
+    for (const c of cards) c.paciente = c.paciente_id ? porId.get(c.paciente_id) ?? null : null
+  }
+
+  const daConversa = (c: AnyObj) => (convId && String(c.conversation_id) === String(convId) ? 0 : 1)
+  cards.sort((a, b) => daConversa(a) - daConversa(b) || String(b.updated_at).localeCompare(String(a.updated_at)))
+  return { pessoa, cards }
+}
+
+/**
+ * A conversa caiu no paciente errado (ou a pessoa passou a falar de outro): leva a
+ * conversa para o card `paraId`. O card de antes fica sem conversa.
+ */
+export async function moverConversa(
+  admin: SupabaseClient,
+  convId: string,
+  paraId: string,
+  autor: string
+): Promise<{ para: AnyObj; de: AnyObj | null }> {
+  const { data: deData } = await admin.from('triagem_hsm').select('*').eq('conversation_id', convId).maybeSingle()
+  const de = (deData as AnyObj | null) ?? null
+  if (de?.id === paraId) return { para: de, de: null }
+
+  const { data: alvo } = await admin.from('triagem_hsm').select('*').eq('id', paraId).maybeSingle()
+  if (!alvo) throw new Error('card de destino não encontrado')
+  // O card guarda a última conversa dele; só trava se ela ainda está em andamento.
+  const outra = (alvo as AnyObj).conversation_id
+  if (outra && String(outra) !== convId && ['open', 'pending'].includes(String((alvo as AnyObj).chatwoot_status))) {
+    throw new Error(`este paciente está em outra conversa em andamento (#${outra})`)
+  }
+
+  // conversation_id é UNIQUE: solta do card atual antes de prender no outro.
+  if (de) {
+    const solta = await admin.from('triagem_hsm').update({ conversation_id: null }).eq('id', de.id)
+    if (solta.error) throw new Error(`soltar conversa: ${solta.error.message}`)
+  }
+  const patch: AnyObj = { conversation_id: convId }
+  if (!(alvo as AnyObj).chatwoot_contact_id && de?.chatwoot_contact_id) patch.chatwoot_contact_id = de.chatwoot_contact_id
+  const res = await admin.from('triagem_hsm').update(patch).eq('id', paraId).select('*').single()
+  if (res.error || !res.data) {
+    if (de) await admin.from('triagem_hsm').update({ conversation_id: convId }).eq('id', de.id)
+    throw new Error(`mover conversa: ${res.error?.message ?? 'sem retorno'}`)
+  }
+  const para = res.data as AnyObj
+
+  await registrarNoHistorico(
+    admin,
+    para.id as string,
+    `🔀 Conversa #${convId} trazida para este card${de ? ` (estava em ${de.contact_name ?? 'outro card'})` : ''}.`,
+    autor
+  )
+  if (de) {
+    await registrarNoHistorico(admin, de.id as string, `🔀 Conversa #${convId} movida para o card de ${para.contact_name ?? 'outro paciente'}.`, autor)
+  }
+  return { para, de }
+}
+
+/**
+ * Outro paciente da mesma pessoa, cadastrado pelo Chatwoot: o card nasce já com a
+ * pessoa como contato. CPF que já tem card não cria outro (card único).
+ */
+export async function criarPacienteDoContato(
+  admin: SupabaseClient,
+  dados: { nome: string; cpf?: string | null; telefone: string; convId?: string | null; nomeContato?: string | null },
+  autor: string
+): Promise<{ card: AnyObj } | { existente: AnyObj }> {
+  const cpf = cpfLimpo(dados.cpf)
+  if (cpf) {
+    const { data } = await admin.from('triagem_hsm').select('*').eq('cpf', cpf).limit(1)
+    if (data?.[0]) return { existente: data[0] as AnyObj }
+  }
+
+  const { data: daConversa } = dados.convId
+    ? await admin.from('triagem_hsm').select('chatwoot_contact_id, phone').eq('conversation_id', dados.convId).maybeSingle()
+    : { data: null }
+  const row: AnyObj = {
+    contact_name: dados.nome.trim(),
+    cpf,
+    phone: (daConversa as AnyObj | null)?.phone ?? dados.telefone,
+    chatwoot_contact_id: (daConversa as AnyObj | null)?.chatwoot_contact_id ?? null,
+    status: 'em_triagem',
+    estagio_funil: null,
+  }
+  const { data: card, error } = await admin.from('triagem_hsm').insert(row).select('*').single()
+  if (error || !card) throw new Error(`criar paciente: ${error?.message ?? 'sem retorno'}`)
+
+  const pessoa = await identificarPessoa(admin, dados.telefone, dados.nomeContato ?? null)
+  if (pessoa) await vincularAoCard(admin, (card as AnyObj).id as string, pessoa)
+  await registrarNoHistorico(
+    admin,
+    (card as AnyObj).id as string,
+    `➕ Paciente cadastrado pelo Chatwoot${pessoa ? ` — contato: ${pessoa.nome}` : ''}.`,
+    autor
+  )
+  return { card: card as AnyObj }
 }
