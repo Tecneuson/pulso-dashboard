@@ -30,14 +30,22 @@ export function CardDaConversa() {
   const [items, setItems] = useState<TriagemLead[]>([])
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  // Relê o card da conversa a cada contexto recebido (~10s) e a cada evento do tempo
+  // real: no fim da triagem a conversa pode TROCAR de card (card único — a linha
+  // provisória some e a conversa vai para o card do paciente), e o merge do payload do
+  // tempo real sozinho não dava conta disso.
+  const [releitura, setReleitura] = useState(0)
+  const reler = () => setReleitura((n) => n + 1)
 
-  // Mudanças no lead (bot, CRM, outro atendente) chegam sem recarregar.
-  useTriagensRealtime(setItems)
+  useTriagensRealtime(setItems, { onEvento: reler })
 
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
       const c = lerContexto(ev)
-      if (c) setCtx(c)
+      if (c) {
+        setCtx(c)
+        reler()
+      }
     }
     window.addEventListener('message', onMessage)
     window.addEventListener('focus', pedirContexto)
@@ -54,11 +62,14 @@ export function CardDaConversa() {
 
   const convId = ctx?.conversation?.id ? String(ctx.conversation.id) : null
 
+  // Spinner só ao abrir/trocar de conversa; a releitura periódica é silenciosa.
+  useEffect(() => {
+    if (convId) setCarregando(true)
+  }, [convId])
+
   useEffect(() => {
     if (!convId) return
     let vivo = true
-    setCarregando(true)
-    setErro(null)
     ;(async () => {
       const { data, error } = await supabase
         .from('triagem_hsm')
@@ -83,13 +94,14 @@ export function CardDaConversa() {
         paciente = (p as PacienteResumo | null) ?? null
       }
       if (!vivo) return
+      setErro(null)
       setItems(lead ? [{ ...lead, paciente }] : [])
       setCarregando(false)
     })()
     return () => {
       vivo = false
     }
-  }, [convId, supabase])
+  }, [convId, releitura, supabase])
 
   // Pela conversa (não por id): se o card ainda não existia, ele aparece quando a
   // Mônica criar a linha (o tempo real traz o INSERT).
