@@ -205,6 +205,11 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
   const dadosFunil = useFunilDados()
   const camposDef = useCampos()
   const [atributos, setAtributos] = useState<Record<string, unknown>>({})
+  // "Alterações não salvas": foto dos campos editáveis no momento em que o lead abriu
+  // (ou foi salvo). `carga` muda no MESMO lote dos setState do load, então a foto já
+  // sai com os valores do lead novo.
+  const [carga, setCarga] = useState(0)
+  const [base, setBase] = useState<string | null>(null)
 
   useEffect(() => {
     if (!triagem) return
@@ -256,6 +261,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
           ? String(triagem.paciente.identificador_cliente)
           : '')
     )
+    setCarga((c) => c + 1)
     // Reinicia só ao abrir outro lead (ou pedir internação/perda), não a cada revalidação.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triagem?.id, autoInternar, autoPerda])
@@ -340,6 +346,14 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
     }, 300)
     return () => clearTimeout(t)
   }, [busca, paciente])
+
+  const foto = JSON.stringify({ form, atributos, origem, contato, numeroPaciente })
+  useEffect(() => {
+    setBase(foto)
+    // Só re-fotografa ao abrir outro lead ou depois de salvar (`carga`).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carga])
+  const sujo = base !== null && foto !== base
 
   if (!triagem) return null
 
@@ -428,6 +442,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
     try {
       await patchTriagem(payload)
       setStatus('saved')
+      setCarga((c) => c + 1)
       setAcaoErro(null)
     } catch (e) {
       console.error('Falha ao salvar:', e)
@@ -1338,16 +1353,27 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
+        {/* Rodapé fixo: o botão Salvar fica sempre à vista, com o aviso de pendência. */}
+        <div
+          className={`sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-border py-3 ${
+            inline ? '-mx-4 px-4 bg-surface-primary/95 backdrop-blur' : '-mx-5 px-5 -mb-5 bg-surface-elevated'
+          }`}
+        >
           <div className="text-caption">
-            {status === 'saved' && (
+            {sujo && !saving && (
+              <span className="inline-flex items-center gap-1.5 font-medium text-warning-600 dark:text-warning-500">
+                <span className="h-2 w-2 rounded-full bg-warning-500" />
+                Alterações não salvas
+              </span>
+            )}
+            {!sujo && status === 'saved' && (
               <span className="inline-flex items-center gap-1.5 text-success-600 dark:text-success-500">
                 <Check size={13} />
                 Salvo
                 {sync === 'ok' ? ' · sincronizado com o Chatwoot' : sync === 'failed' ? ' · falha ao sincronizar Chatwoot' : ''}
               </span>
             )}
-            {status === 'error' && (
+            {!sujo && status === 'error' && (
               <span className="inline-flex items-center gap-1.5 text-danger-500">
                 <AlertCircle size={13} />
                 Erro ao salvar
@@ -1361,7 +1387,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
               </Button>
             )}
             <Button size="sm" onClick={handleSave} loading={saving}>
-              Salvar
+              {sujo ? 'Salvar alterações' : 'Salvar'}
             </Button>
           </div>
         </div>
