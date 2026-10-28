@@ -277,54 +277,6 @@ export async function pacientesDoContato(
 }
 
 /**
- * A conversa caiu no paciente errado (ou a pessoa passou a falar de outro): leva a
- * conversa para o card `paraId`. O card de antes fica sem conversa.
- */
-export async function moverConversa(
-  admin: SupabaseClient,
-  convId: string,
-  paraId: string,
-  autor: string
-): Promise<{ para: AnyObj; de: AnyObj | null }> {
-  const { data: deData } = await admin.from('triagem_hsm').select('*').eq('conversation_id', convId).maybeSingle()
-  const de = (deData as AnyObj | null) ?? null
-  if (de?.id === paraId) return { para: de, de: null }
-
-  const { data: alvo } = await admin.from('triagem_hsm').select('*').eq('id', paraId).maybeSingle()
-  if (!alvo) throw new Error('card de destino não encontrado')
-  // O card guarda a última conversa dele; só trava se ela ainda está em andamento.
-  const outra = (alvo as AnyObj).conversation_id
-  if (outra && String(outra) !== convId && ['open', 'pending'].includes(String((alvo as AnyObj).chatwoot_status))) {
-    throw new Error(`este paciente está em outra conversa em andamento (#${outra})`)
-  }
-
-  // conversation_id é UNIQUE: solta do card atual antes de prender no outro.
-  if (de) {
-    const solta = await admin.from('triagem_hsm').update({ conversation_id: null }).eq('id', de.id)
-    if (solta.error) throw new Error(`soltar conversa: ${solta.error.message}`)
-  }
-  const patch: AnyObj = { conversation_id: convId }
-  if (!(alvo as AnyObj).chatwoot_contact_id && de?.chatwoot_contact_id) patch.chatwoot_contact_id = de.chatwoot_contact_id
-  const res = await admin.from('triagem_hsm').update(patch).eq('id', paraId).select('*').single()
-  if (res.error || !res.data) {
-    if (de) await admin.from('triagem_hsm').update({ conversation_id: convId }).eq('id', de.id)
-    throw new Error(`mover conversa: ${res.error?.message ?? 'sem retorno'}`)
-  }
-  const para = res.data as AnyObj
-
-  await registrarNoHistorico(
-    admin,
-    para.id as string,
-    `🔀 Conversa #${convId} trazida para este card${de ? ` (estava em ${de.contact_name ?? 'outro card'})` : ''}.`,
-    autor
-  )
-  if (de) {
-    await registrarNoHistorico(admin, de.id as string, `🔀 Conversa #${convId} movida para o card de ${para.contact_name ?? 'outro paciente'}.`, autor)
-  }
-  return { para, de }
-}
-
-/**
  * Outro paciente da mesma pessoa, cadastrado pelo Chatwoot: o card nasce já com a
  * pessoa como contato. CPF que já tem card não cria outro (card único).
  */

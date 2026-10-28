@@ -238,16 +238,3 @@ export async function atributosDoContato(contactId: number): Promise<AnyObj> {
     return {}
   }
 }
-
-/**
- * Espelha o card INTEIRO na conversa dele (todos os campos preenchidos, label da etapa).
- * Para quando a conversa troca de card: o database webhook só vê `conversation_id`
- * mudar, que não é campo sincronizado.
- */
-export async function pushCardInteiro(supabase: SupabaseClient, row: AnyObj): Promise<PushResult> {
-  const campos: AnyObj = {}
-  for (const [k, v] of Object.entries(row)) {
-    if (v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)) campos[k] = v
-  }
-  return pushTriagemParaChatwoot(supabase, row, campos)
-}

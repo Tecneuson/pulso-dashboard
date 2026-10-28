@@ -9,17 +9,14 @@ interface Props {
   convId: string | null
   /** Quem está falando (vira contato do paciente novo). */
   nomeContato: string | null
-  /** Paciente em que a conversa está hoje (para o texto da opção de mover). */
-  pacienteDaConversa: string | null
   onCriado: (card: TriagemLead) => void
   onCancelar: () => void
 }
 
 /** Outro paciente da pessoa que está falando, cadastrado de dentro do Chatwoot. */
-export function NovoPacienteForm({ telefone, convId, nomeContato, pacienteDaConversa, onCriado, onCancelar }: Props) {
+export function NovoPacienteForm({ telefone, convId, nomeContato, onCriado, onCancelar }: Props) {
   const [nome, setNome] = useState('')
   const [cpf, setCpf] = useState('')
-  const [mover, setMover] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -40,7 +37,6 @@ export function NovoPacienteForm({ telefone, convId, nomeContato, pacienteDaConv
         telefone,
         nome_contato: nomeContato,
         conversation_id: convId,
-        mover_conversa: mover,
       }),
     }).catch(() => null)
     const dados = await res?.json().catch(() => null)
@@ -70,13 +66,6 @@ export function NovoPacienteForm({ telefone, convId, nomeContato, pacienteDaConv
         <Input id="novo-nome" label="Nome do paciente" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" autoFocus />
         <Input id="novo-cpf" label="CPF do paciente (opcional)" value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" />
       </div>
-      {convId && (
-        <label className="flex items-center gap-2 text-sm text-content-primary">
-          <input type="checkbox" checked={mover} onChange={(e) => setMover(e.target.checked)} />
-          Mover esta conversa para o novo paciente
-          {pacienteDaConversa ? <span className="text-content-tertiary">(hoje está em {pacienteDaConversa})</span> : null}
-        </label>
-      )}
       {erro && <p className="text-sm text-danger-500">{erro}</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancelar}>

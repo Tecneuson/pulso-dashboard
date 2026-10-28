@@ -12,29 +12,37 @@ export function chatwootAccountId(): string {
   return process.env.NEXT_PUBLIC_CHATWOOT_ACCOUNT_ID || '1'
 }
 
-export function chatwootConversationUrl(conversationId: string | number | null | undefined): string | null {
-  const base = chatwootBaseUrl()
+export function chatwootConversationUrl(
+  conversationId: string | number | null | undefined,
+  base: string | null = chatwootBaseUrl()
+): string | null {
   if (!base || conversationId == null || conversationId === '') return null
   return `${base}/app/accounts/${chatwootAccountId()}/conversations/${conversationId}`
 }
 
-export function chatwootContactUrl(contactId: string | number | null | undefined): string | null {
-  const base = chatwootBaseUrl()
+export function chatwootContactUrl(
+  contactId: string | number | null | undefined,
+  base: string | null = chatwootBaseUrl()
+): string | null {
   if (!base || contactId == null || contactId === '') return null
   return `${base}/app/accounts/${chatwootAccountId()}/contacts/${contactId}`
 }
 
 /**
  * Melhor link para um lead: a conversa (quando existe) ou a ficha do contato
- * (lead criado no CRM e espelhado no Chatwoot sem conversa).
+ * (lead criado no CRM e espelhado no Chatwoot sem conversa). `base`: dentro do
+ * Chatwoot (Dashboard App) é o endereço em que a atendente está logada.
  */
-export function chatwootLinkDoLead(t: {
-  conversation_id?: string | number | null
-  chatwoot_contact_id?: number | null
-}): { url: string; tipo: 'conversa' | 'contato' } | null {
-  const conv = chatwootConversationUrl(t.conversation_id)
+export function chatwootLinkDoLead(
+  t: {
+    conversation_id?: string | number | null
+    chatwoot_contact_id?: number | null
+  },
+  base: string | null = chatwootBaseUrl()
+): { url: string; tipo: 'conversa' | 'contato' } | null {
+  const conv = chatwootConversationUrl(t.conversation_id, base)
   if (conv) return { url: conv, tipo: 'conversa' }
-  const contato = chatwootContactUrl(t.chatwoot_contact_id)
+  const contato = chatwootContactUrl(t.chatwoot_contact_id, base)
   if (contato) return { url: contato, tipo: 'contato' }
   return null
 }

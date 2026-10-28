@@ -1,14 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Loader2, Plus } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Loader2, Plus } from 'lucide-react'
 import { useTriagensRealtime } from '@/lib/realtime'
 import { comEtapa, etapaFromEstagio } from '@/lib/funil-etapas'
 import { lerContexto, ORIGENS_CHATWOOT, PEDIDO_CONTEXTO, type ContextoChatwoot } from '@/lib/chatwoot/embed'
+import { chatwootLinkDoLead } from '@/lib/chatwoot/urls'
 import type { TriagemLead } from '@/types'
 import { CardDetail } from '@/components/kanban/card-detail'
 import { FunilDadosProvider } from '@/components/kanban/funil-dados'
-import { Badge, Button, EtapaBadge } from '@/components/ui'
+import { Badge, EtapaBadge } from '@/components/ui'
 import { NovoPacienteForm } from './novo-paciente'
 
 /** Pede o contexto de novo de tempos em tempos: se o atendente troca de conversa com a
@@ -31,10 +32,12 @@ interface Pessoa {
 /**
  * Card do lead dentro do Chatwoot (Dashboard App "Pulso"). Em cima, uma aba por
  * paciente da pessoa que está falando (consultor, pai com dois filhos…): dá para abrir
- * outro paciente, levar a conversa para ele ou cadastrar um paciente novo.
+ * outro paciente (e ir até a conversa dele) ou cadastrar um paciente novo.
  */
 export function CardDaConversa() {
   const [ctx, setCtx] = useState<ContextoChatwoot | null>(null)
+  // Endereço do Chatwoot em que a atendente está logada (de onde veio o contexto).
+  const [origemChatwoot, setOrigemChatwoot] = useState<string | null>(null)
   const [semContexto, setSemContexto] = useState(false)
   const [pessoa, setPessoa] = useState<Pessoa | null>(null)
   const [cards, setCards] = useState<TriagemLead[]>([])
@@ -42,7 +45,6 @@ export function CardDaConversa() {
   const [erro, setErro] = useState<string | null>(null)
   const [abertoId, setAbertoId] = useState<string | null>(null)
   const [criando, setCriando] = useState(false)
-  const [movendo, setMovendo] = useState(false)
   const [erroAcao, setErroAcao] = useState<string | null>(null)
   // Relê a lista a cada contexto recebido (~10s) e a cada evento do tempo real: no fim
   // da triagem a conversa pode TROCAR de card (card único).
@@ -56,6 +58,7 @@ export function CardDaConversa() {
       const c = lerContexto(ev)
       if (c) {
         setCtx(c)
+        setOrigemChatwoot(ev.origin)
         reler()
       }
     }
@@ -117,28 +120,6 @@ export function CardDaConversa() {
   const leads = useMemo(() => cards.map(comEtapa), [cards])
   const nomeContato = daConversa?.nome_contato ?? pessoa?.nome ?? ctx?.contact?.name ?? null
 
-  async function moverPara(destino: TriagemLead) {
-    if (!convId) return
-    const nome = destino.contact_name ?? 'este paciente'
-    const antes = daConversa?.contact_name
-    if (!window.confirm(`Mover a conversa #${convId} para ${nome}?${antes ? ` O card de ${antes} fica sem esta conversa.` : ''}`)) return
-    setMovendo(true)
-    setErroAcao(null)
-    const res = await fetch('/api/card/mover-conversa', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversation_id: convId, para_id: destino.id }),
-    }).catch(() => null)
-    const d = await res?.json().catch(() => null)
-    setMovendo(false)
-    if (!res?.ok) {
-      setErroAcao(d?.error ?? 'Não foi possível mover a conversa.')
-      return
-    }
-    setAbertoId(destino.id)
-    reler()
-  }
-
   if (!ctx) {
     return (
       <Aviso>
@@ -151,6 +132,7 @@ export function CardDaConversa() {
   const botPausado = conv?.custom_attributes?.bot_pausado === true
   const semAtendente = !conv?.meta?.assignee
   const vendoOutro = !criando && !!aberto && aberto.id !== daConversa?.id
+  const linkAberto = aberto ? chatwootLinkDoLead(aberto, origemChatwoot) : null
 
   return (
     <div className="space-y-4">
@@ -229,21 +211,19 @@ export function CardDaConversa() {
         </div>
       </section>
 
-      {vendoOutro && aberto && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-info-500/30 bg-info-500/10 p-3 text-sm text-content-primary">
-          <span className="min-w-[240px] flex-1">
-            Você está vendo outro paciente{pessoa ? ` de ${pessoa.nome}` : ''}.{' '}
-            {daConversa ? (
-              <>
-                Esta conversa está no card de <strong>{daConversa.contact_name || 'outro paciente'}</strong>.
-              </>
-            ) : (
-              'Esta conversa ainda não está em nenhum card.'
-            )}
-          </span>
-          <Button size="sm" variant="secondary" loading={movendo} onClick={() => moverPara(aberto)}>
-            Mover esta conversa para {(aberto.contact_name || 'este paciente').split(' ')[0]}
-          </Button>
+      {vendoOutro && linkAberto && (
+        <div className="flex justify-end">
+          {/* _top: troca a conversa aberta no próprio Chatwoot (não abre outra aba). */}
+          <a
+            href={linkAberto.url}
+            target="_top"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-tertiary px-3.5 py-1.5 text-sm font-medium text-content-primary transition-colors hover:border-border-hover"
+          >
+            <ExternalLink size={14} />
+            {linkAberto.tipo === 'conversa'
+              ? `Ir até a conversa${aberto?.conversation_id ? ` #${aberto.conversation_id}` : ''}`
+              : 'Abrir o contato no Chatwoot'}
+          </a>
         </div>
       )}
       {erroAcao && <p className="text-sm text-danger-500">{erroAcao}</p>}
@@ -255,7 +235,6 @@ export function CardDaConversa() {
           telefone={telefone}
           convId={convId}
           nomeContato={nomeContato}
-          pacienteDaConversa={daConversa?.contact_name ?? null}
           onCriado={(card) => {
             setCards((prev) => [...prev, card])
             setAbertoId(card.id)

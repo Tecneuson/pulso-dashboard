@@ -30,6 +30,7 @@ export const PEDIDO_CONTEXTO = 'chatwoot-dashboard-app:fetch-info'
 export interface ContextoChatwoot {
   conversation?: {
     id?: number
+    account_id?: number
     status?: string
     custom_attributes?: Record<string, unknown>
     meta?: { assignee?: { id?: number; name?: string } | null; team?: { name?: string } | null }
