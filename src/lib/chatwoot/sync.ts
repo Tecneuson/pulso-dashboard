@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Triagem } from '@/types'
+import type { EstagioFunil, Triagem } from '@/types'
 import { isKids } from '@/lib/idade'
+import { ETAPA_LABEL, ehLabelDeFunil, etapaFromEstagio } from '@/lib/funil-etapas'
 import {
   chatwootConfigured,
   createContact,
@@ -143,11 +144,16 @@ export async function pushTriagemParaChatwoot(
       // Labels: o Chatwoot é a fonte da verdade (é lá que a equipe põe e tira). Daqui só
       // ACRESCENTA o que o CRM/bot marcou (ex.: "urgente"), nunca remove: substituir o
       // conjunto apagava as labels da equipe a cada gravação da Mônica (que manda `[]`).
-      if (Array.isArray(patch.tags)) {
-        const atuais = conv?.labels ?? []
-        const novas = (patch.tags as string[]).filter((t) => !atuais.includes(t))
-        if (novas.length) await setConversationLabels(convId, [...atuais, ...novas])
-      }
+      // Exceção: as `funil-*` são do CRM — fica só a da etapa atual do card.
+      const atuais = conv?.labels ?? []
+      const daEtapa = ETAPA_LABEL[etapaFromEstagio(row.estagio_funil as EstagioFunil | null)]
+      const novas = Array.isArray(patch.tags)
+        ? (patch.tags as string[]).filter((t) => !ehLabelDeFunil(t) && !atuais.includes(t))
+        : []
+      const final = [...atuais.filter((l) => !ehLabelDeFunil(l) || l === daEtapa), ...novas]
+      if (!final.includes(daEtapa)) final.push(daEtapa)
+      const mudou = final.length !== atuais.length || final.some((l) => !atuais.includes(l))
+      if (mudou) await setConversationLabels(convId, final)
     }
     return { status: 'ok', contactId }
   } catch (e) {

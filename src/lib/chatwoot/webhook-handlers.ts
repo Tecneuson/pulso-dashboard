@@ -3,7 +3,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { MOTIVO_PERDA_INATIVIDADE } from '@/types'
 import { isKids } from '@/lib/idade'
 import { assuntosIsentosDesfecho, botAtivo, botNome, exigirDesfecho, n8nAtivo } from '@/lib/env'
-import { ETAPA_TO_ESTAGIO, etapaFromEstagio } from '@/lib/funil-etapas'
+import {
+  ETAPA_LABEL,
+  ETAPA_TO_ESTAGIO,
+  ehLabelDeFunil,
+  etapaFromEstagio,
+  etapaPelasLabels,
+} from '@/lib/funil-etapas'
 import {
   getContactConversations,
   getConversation,
@@ -140,8 +146,9 @@ async function aplicarAtributos(
 
   // Consequências no Chatwoot (idempotentes, comparadas com o que o Chatwoot já tem):
   // estágio do contato coerente com venda/perda marcadas na conversa; kids.
+  // Sem atributos de contato (contato com vários cards), nada volta para o contato.
   const alvo = contactId ?? (row.chatwoot_contact_id as number | null) ?? null
-  if (alvo) {
+  if (alvo && Object.keys(contactAttrs).length) {
     const volta: AnyObj = {}
     const estagioFinal = 'estagio_funil' in patch ? patch.estagio_funil : row.estagio_funil
     if (desfechoAtivo) {
@@ -161,6 +168,14 @@ async function aplicarAtributos(
   return mudou
 }
 
+async function contarCardsDoContato(admin: SupabaseClient, contactId: number): Promise<number> {
+  const { count } = await admin
+    .from('triagem_hsm')
+    .select('id', { count: 'exact', head: true })
+    .eq('chatwoot_contact_id', contactId)
+  return count ?? 0
+}
+
 function mesmoConjunto(a: unknown, b: unknown): boolean {
   const A = Array.isArray(a) ? a : []
   const B = Array.isArray(b) ? b : []
@@ -171,15 +186,18 @@ function mesmoConjunto(a: unknown, b: unknown): boolean {
  * As labels do payload são um retrato do momento em que o Chatwoot gerou o evento.
  * Numa rajada (transbordo: pausa + nota + atributos chegam juntos), eventos atrasados
  * trazem as labels de ANTES — gravá-los fazia o CRM tirar e repor a label várias vezes
- * ("Arthur adicionou / removeu urgente"). Se o payload diverge do banco, relê do Chatwoot.
- * `null` = não deu para confirmar; melhor não mexer nas tags.
+ * ("Arthur adicionou / removeu urgente"). Se o payload diverge do banco (tags da equipe
+ * ou label `funil-*` da etapa), relê do Chatwoot.
+ * `null` = não deu para confirmar; melhor não mexer nas tags nem na etapa.
  */
-async function labelsConfiaveis(
-  convId: string,
-  doEvento: string[],
-  noBanco: unknown
-): Promise<string[] | null> {
-  if (mesmoConjunto(doEvento, noBanco)) return doEvento
+async function labelsConfiaveis(convId: string, doEvento: string[], row: AnyObj): Promise<string[] | null> {
+  const daEtapa = ETAPA_LABEL[etapaFromEstagio(row.estagio_funil)]
+  const funilDoEvento = doEvento.filter(ehLabelDeFunil)
+  const bate =
+    mesmoConjunto(doEvento.filter((l) => !ehLabelDeFunil(l)), row.tags) &&
+    funilDoEvento.length === 1 &&
+    funilDoEvento[0] === daEtapa
+  if (bate) return doEvento
   try {
     return (await getConversation(convId)).labels ?? []
   } catch (e) {
@@ -210,16 +228,29 @@ export async function onConversation(body: AnyObj): Promise<AnyObj> {
 
   const extra: AnyObj = {}
   if (Array.isArray(body.labels)) {
-    const labels = await labelsConfiaveis(convId, body.labels as string[], row.tags)
-    if (labels) extra.tags = labels
+    const labels = await labelsConfiaveis(convId, body.labels as string[], row)
+    if (labels) {
+      extra.tags = labels.filter((l) => !ehLabelDeFunil(l))
+      // A atendente trocou a label `funil-*` no Chatwoot → move o card. A volta (tirar a
+      // label antiga) é do sync CRM → Chatwoot, disparado por esta mudança no banco.
+      const atual = etapaFromEstagio(row.estagio_funil)
+      const pedida = etapaPelasLabels(labels, atual)
+      if (pedida && pedida !== atual) {
+        extra.estagio_funil = ETAPA_TO_ESTAGIO[pedida]
+        if (pedida !== 'perdido') extra.motivo_perda = null
+      }
+    }
   }
   if (typeof body.status === 'string' && body.status) extra.chatwoot_status = body.status
   if (!row.chatwoot_contact_id && sender.id) extra.chatwoot_contact_id = Number(sender.id)
   const atendente = await atendenteIdPorAgente(admin, body.meta?.assignee?.id)
   if (atendente !== undefined) extra.atendente_id = atendente
 
-  const fields = await aplicarAtributos(admin, row, contactAttrs, convAttrs, extra, contactId)
-  return { convId, fields }
+  // Mesma trava do contact_updated: atributo de contato descreve o PACIENTE, e um
+  // telefone com vários cards não diz de qual — copiar cruzava os dados entre cards.
+  const varios = contactId ? (await contarCardsDoContato(admin, contactId)) > 1 : false
+  const fields = await aplicarAtributos(admin, row, varios ? {} : contactAttrs, convAttrs, extra, contactId)
+  return { convId, fields, ...(varios ? { atributosDeContato: 'ignorados (vários cards)' } : {}) }
 }
 
 // ------------------------------------------------------------
@@ -445,11 +476,14 @@ export async function onMessageCreated(body: AnyObj): Promise<AnyObj> {
  * existe card, o contato é vinculado a ELE — é o caso da esposa falando do mesmo
  * filho. Passando de 4 responsáveis, o contato só entra no histórico.
  */
-async function reconhecerContato(admin: SupabaseClient, row: AnyObj, sender: AnyObj): Promise<AnyObj> {
+export async function reconhecerContato(admin: SupabaseClient, row: AnyObj, sender: AnyObj): Promise<AnyObj> {
   // Paciente falando do próprio caso não é "responsável" de si mesmo: sem vínculo, senão
   // o card ganha uma tag repetindo o nome que já está no título. Sai antes de
   // identificarPessoa() de propósito — ela criaria a ficha do responsável à toa.
   if (row.para_quem === 'voce_mesmo') return { vinculo: 'proprio_paciente' }
+  // Antes da Mônica saber para quem é, quem fala pode ser o próprio paciente: esperar
+  // (o fim da triagem chama de novo, pelo sync — /api/sync/triagem).
+  if (!row.para_quem) return { vinculo: 'aguardando_para_quem' }
 
   const out: AnyObj = {}
   try {

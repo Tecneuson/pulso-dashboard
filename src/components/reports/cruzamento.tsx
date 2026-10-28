@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { Cruzamento } from '@/lib/bi'
 
 /**
@@ -27,12 +27,14 @@ export function TabelaCruzamento({
   colunaAtual: string
 }) {
   const router = useRouter()
+  // A mesma tela abre em /reports e dentro do Chatwoot (/embed/painel/relatorios).
+  const pathname = usePathname()
   const sp = useSearchParams()
 
   function push(chave: string, valor: string) {
     const params = new URLSearchParams(sp.toString())
     params.set(chave, valor)
-    router.push(`/reports?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   const sel =

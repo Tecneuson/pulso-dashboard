@@ -8,9 +8,9 @@ import { LIMITE_RESPONSAVEIS, type PapelContato } from '@/types'
  *  1. chega mensagem → identifica a PESSOA pelo telefone do WhatsApp
  *     (consultor já cadastrado vence; senão, cria/reaproveita um responsável);
  *  2. procura o PACIENTE pelo CPF entre os cards existentes;
- *     ⚠️ o telefone identifica a PESSOA, nunca o paciente: o mesmo número fala de
- *     vários pacientes (pai com dois filhos, consultor com vários encaminhados).
- *     Card por telefone juntaria pacientes diferentes no mesmo atendimento;
+ *     ⚠️ o telefone identifica a PESSOA; o paciente, só quando o número tem UM card e
+ *     o nome bate (ver lib/card-unico.ts). O mesmo número fala de vários pacientes
+ *     (pai com dois filhos, consultor com vários encaminhados);
  *  3. achou → vincula a pessoa àquele card; não achou → card novo;
  *  4. o card aceita 4 responsáveis. Do 5º em diante o contato NÃO vira vínculo,
  *     só evento no histórico — foi o que o cliente pediu.

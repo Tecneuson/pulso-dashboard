@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { Button } from '@/components/ui'
 import type { UsuarioResumo } from '@/lib/api-store'
@@ -35,6 +35,8 @@ export function FiltrosBI({
   atendentes: UsuarioResumo[]
 }) {
   const router = useRouter()
+  // A mesma tela abre em /reports e dentro do Chatwoot (/embed/painel/relatorios).
+  const pathname = usePathname()
   const sp = useSearchParams()
   const [deLocal, setDeLocal] = useState(de)
   const [ateLocal, setAteLocal] = useState(ate)
@@ -45,7 +47,7 @@ export function FiltrosBI({
       if (v) params.set(k, v)
       else params.delete(k)
     }
-    router.push(`/reports?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   const presetAtivo = preset || (de || ate ? 'custom' : 'tudo')
@@ -96,7 +98,7 @@ export function FiltrosBI({
       {(de || ate || atendente || preset) && (
         <button
           type="button"
-          onClick={() => router.push('/reports')}
+          onClick={() => router.push(pathname)}
           className="text-xs text-content-secondary hover:text-danger-500 pb-2"
         >
           Limpar filtros

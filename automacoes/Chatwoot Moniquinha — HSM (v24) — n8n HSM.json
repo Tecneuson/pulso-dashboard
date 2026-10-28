@@ -854,6 +854,12 @@
               "name": "nome_contato",
               "value": "={{ $json.body.record.nome_contato }}",
               "type": "string"
+            },
+            {
+              "id": "6b58eb2a-50cd-41a9-940c-22bd5c60a8fa",
+              "name": "conversation_id_antes",
+              "value": "={{ $json.body.old_record ? $json.body.old_record.conversation_id : null }}",
+              "type": "string"
             }
           ]
         },
@@ -1481,7 +1487,7 @@
           "conditions": [
             {
               "id": "pz-0001-0001-0001-000000000001",
-              "leftValue": "={{ ( ($('Edit Fields9').item.json.transbordado === true || $('Edit Fields9').item.json.transbordado === 'true') && !($('Edit Fields9').item.json.transbordado_antes === true || $('Edit Fields9').item.json.transbordado_antes === 'true') ) || ( ($('Edit Fields9').item.json.triagem_concluida === true || $('Edit Fields9').item.json.triagem_concluida === 'true') && !($('Edit Fields9').item.json.concluida_antes === true || $('Edit Fields9').item.json.concluida_antes === 'true') ) }}",
+              "leftValue": "={{ (( ($('Edit Fields9').item.json.transbordado === true || $('Edit Fields9').item.json.transbordado === 'true') && !($('Edit Fields9').item.json.transbordado_antes === true || $('Edit Fields9').item.json.transbordado_antes === 'true') ) || ( ($('Edit Fields9').item.json.triagem_concluida === true || $('Edit Fields9').item.json.triagem_concluida === 'true') && !($('Edit Fields9').item.json.concluida_antes === true || $('Edit Fields9').item.json.concluida_antes === 'true') )) && ( $('Edit Fields9').item.json.conversation_id_antes == null || $('Edit Fields9').item.json.conversation_id_antes === '' || String($('Edit Fields9').item.json.conversation_id_antes) === 'null' || String($('Edit Fields9').item.json.conversation_id_antes) === String($('Edit Fields9').item.json.conversation_id) ) }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -1501,7 +1507,8 @@
         4272
       ],
       "id": "172d68ab-a250-45ec-8357-e55402e7844e",
-      "name": "Triagem ACABOU agora? (transicao)"
+      "name": "Triagem ACABOU agora? (transicao)",
+      "notes": "Só na MESMA conversa: quando o CRM leva a conversa para o card que o paciente já tinha (card único), a gravação no card não é fim de triagem novo — sem isso sairiam nota de resumo e pausa em dobro."
     },
     {
       "parameters": {

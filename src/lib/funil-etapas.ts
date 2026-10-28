@@ -105,6 +105,53 @@ export function isFunilEtapa(value: string): value is FunilEtapa {
 }
 
 // ============================================================
+// Etapa como label da conversa no Chatwoot (dois sentidos)
+// ============================================================
+
+/**
+ * Cada etapa vira uma label `funil-*` na conversa. O CRM é dono dessas labels: ao mudar
+ * a etapa, tira a anterior e põe a nova; a atendente trocar a label no Chatwoot move o
+ * card. Ficam FORA de `triagem_hsm.tags` (que guarda só as labels da equipe/bot).
+ */
+export const ETAPA_LABEL: Record<FunilEtapa, string> = {
+  contato: 'funil-contato',
+  atendendo: 'funil-atendendo',
+  negociando: 'funil-negociando',
+  elegivel: 'funil-em-transito',
+  internacao: 'funil-internacao',
+  perdido: 'funil-perdido',
+}
+
+/** Cor da label no Chatwoot (hex), na mesma escala do board. */
+export const ETAPA_LABEL_COR: Record<FunilEtapa, string> = {
+  contato: '#98A2B3',
+  atendendo: '#2E90FA',
+  negociando: '#F79009',
+  elegivel: '#7A5AF8',
+  internacao: '#12B76A',
+  perdido: '#F04438',
+}
+
+export function ehLabelDeFunil(label: string): boolean {
+  return label.startsWith('funil-')
+}
+
+export function etapaDaLabel(label: string): FunilEtapa | null {
+  const achada = FUNIL_ETAPAS.find((e) => ETAPA_LABEL[e] === label)
+  return achada ?? null
+}
+
+/**
+ * Etapa pedida pelas labels da conversa. Com mais de uma `funil-*` (a atendente pôs a
+ * nova sem tirar a antiga), vale a que é diferente da etapa atual do card.
+ */
+export function etapaPelasLabels(labels: string[], atual: FunilEtapa): FunilEtapa | null {
+  const etapas = labels.map(etapaDaLabel).filter((e): e is FunilEtapa => !!e)
+  if (etapas.length === 0) return null
+  return etapas.find((e) => e !== atual) ?? etapas[0]
+}
+
+// ============================================================
 // Origem da Conversa (dimensão nova — só visual, persistida no navegador)
 // ============================================================
 

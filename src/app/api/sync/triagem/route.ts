@@ -5,7 +5,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { chatwootConfigured, getConversation, postPrivateNote, updateConversationCustomAttributes } from '@/lib/chatwoot/client'
 import { KEYS } from '@/lib/chatwoot/attributes'
 import { pushTriagemParaChatwoot } from '@/lib/chatwoot/sync'
-import { escreverComRedeDeSeguranca, type AnyObj } from '@/lib/triagem-db'
+import { atualizarSeMudou, escreverComRedeDeSeguranca, type AnyObj } from '@/lib/triagem-db'
+import { acharCardDoPaciente, fundirNoCard } from '@/lib/card-unico'
+import { etapaFromEstagio } from '@/lib/funil-etapas'
+import { reconhecerContato } from '@/lib/chatwoot/webhook-handlers'
 
 /**
  * Database Webhook do Supabase (tabela triagem_hsm, INSERT/UPDATE) → Chatwoot.
@@ -41,6 +44,10 @@ function mudou(a: unknown, b: unknown): boolean {
   return JSON.stringify(a ?? null) !== JSON.stringify(b ?? null)
 }
 
+function vazio(v: unknown): boolean {
+  return v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0)
+}
+
 export async function POST(request: NextRequest) {
   const secret = process.env.SYNC_WEBHOOK_SECRET
   if (!secret) {
@@ -55,31 +62,73 @@ export async function POST(request: NextRequest) {
   if (!record || body?.table !== 'triagem_hsm') return NextResponse.json({ error: 'payload inválido' }, { status: 400 })
   const old = (body?.old_record as AnyObj | null) ?? null
 
-  const patch: AnyObj = {}
+  // INSERT: só o que veio preenchido. Mandar os nulos apagava os atributos do contato
+  // e devolvia os outros cards do mesmo telefone para "Contato".
+  let patch: AnyObj = {}
   for (const k of CAMPOS_SYNC) {
     if (!(k in record)) continue
-    if (!old || mudou(old[k], record[k])) patch[k] = record[k]
+    if (old ? mudou(old[k], record[k]) : !vazio(record[k])) patch[k] = record[k]
   }
   const admin = createAdminClient()
   const out: AnyObj = { id: record.id, campos: Object.keys(patch) }
 
-  if (Object.keys(patch).length) {
-    const push = await pushTriagemParaChatwoot(admin, record, patch)
-    out.chatwoot = push.status
-    if (push.detalhes) out.detalhes = push.detalhes
-    if (push.contactId && !record.chatwoot_contact_id) {
-      await escreverComRedeDeSeguranca(admin, { id: record.id }, { chatwoot_contact_id: push.contactId }).catch(() => null)
+  // "Triagem acabou agora" (a Mônica salvou e transferiu). Na MESMA conversa: quando a
+  // conversa troca de card (fusão abaixo), a gravação no card do paciente não é um fim
+  // de triagem novo — senão sairiam nota e pausa em dobro.
+  const acabouAgora =
+    !!old &&
+    !!record.conversation_id &&
+    old.conversation_id === record.conversation_id &&
+    ((record.transbordado === true && old.transbordado !== true) ||
+      (record.triagem_concluida === true && old.triagem_concluida !== true))
+
+  let card: AnyObj = record
+  let fundido = false
+
+  // 1) Card único: a conversa vai para o card que o paciente já tinha (CPF/telefone).
+  if (acabouAgora && record.assunto === 'internacao') {
+    try {
+      const achado = await acharCardDoPaciente(admin, record)
+      if (achado) {
+        card = await fundirNoCard(admin, record, achado.alvo, achado.motivo)
+        fundido = true
+        out.unificado = { card: card.id, motivo: achado.motivo }
+        // A conversa nova recebe o card inteiro (atributos e label da etapa).
+        patch = {}
+        for (const k of CAMPOS_SYNC) if (!vazio(card[k])) patch[k] = card[k]
+      }
+    } catch (e) {
+      out.unificadoErro = (e as Error).message
     }
   }
 
-  // Transição "triagem acabou agora": pausar o bot e deixar a nota de resumo é
-  // CICLO DE VIDA DO BOT — quem faz é quem hospeda o bot. Com o n8n no ar (padrão),
-  // é ele; o app só assume no modo sem n8n. Sem essa guarda sairiam duas notas.
-  const acabouAgora =
-    !!old &&
-    record.conversation_id &&
-    ((record.transbordado === true && old.transbordado !== true) ||
-      (record.triagem_concluida === true && old.triagem_concluida !== true))
+  // 2) Funil: triagem concluída e qualificada tira o card de Contato → Atendendo.
+  //    (Na fusão isso já foi decidido junto.)
+  if (!fundido && acabouAgora && record.status === 'qualificado' && etapaFromEstagio(record.estagio_funil) === 'contato') {
+    await atualizarSeMudou(admin, { id: record.id }, { estagio_funil: 'em_atendimento' }, record)
+    card = { ...record, estagio_funil: 'em_atendimento' }
+    patch.estagio_funil = 'em_atendimento'
+    out.funil = 'atendendo'
+  }
+
+  // 3) Quem falou na triagem vira contato do paciente (responsável/consultor).
+  const paraQuemAgora = card.para_quem && (fundido || !old || old.para_quem !== record.para_quem)
+  if (paraQuemAgora && card.conversation_id) {
+    out.contato = await reconhecerContato(admin, card, { phone_number: record.phone, name: record.nome_contato })
+  }
+
+  if (Object.keys(patch).length) {
+    const push = await pushTriagemParaChatwoot(admin, card, patch)
+    out.chatwoot = push.status
+    if (push.detalhes) out.detalhes = push.detalhes
+    if (push.contactId && !card.chatwoot_contact_id) {
+      await escreverComRedeDeSeguranca(admin, { id: card.id }, { chatwoot_contact_id: push.contactId }).catch(() => null)
+    }
+  }
+
+  // Pausar o bot e deixar a nota de resumo é CICLO DE VIDA DO BOT — quem faz é quem
+  // hospeda o bot. Com o n8n no ar (padrão), é ele; o app só assume no modo sem n8n.
+  // Sem essa guarda sairiam duas notas.
   if (acabouAgora && !n8nAtivo()) {
     try {
       const conv = await getConversation(record.conversation_id)
