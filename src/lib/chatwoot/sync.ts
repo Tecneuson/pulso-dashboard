@@ -140,7 +140,14 @@ export async function pushTriagemParaChatwoot(
         // passa os atributos atuais para MESCLAR (o endpoint do Chatwoot substitui tudo)
         await updateConversationCustomAttributes(convId, convAttrs, conv?.custom_attributes)
       }
-      if (Array.isArray(patch.tags)) await setConversationLabels(convId, patch.tags as string[])
+      // Labels: o Chatwoot é a fonte da verdade (é lá que a equipe põe e tira). Daqui só
+      // ACRESCENTA o que o CRM/bot marcou (ex.: "urgente"), nunca remove: substituir o
+      // conjunto apagava as labels da equipe a cada gravação da Mônica (que manda `[]`).
+      if (Array.isArray(patch.tags)) {
+        const atuais = conv?.labels ?? []
+        const novas = (patch.tags as string[]).filter((t) => !atuais.includes(t))
+        if (novas.length) await setConversationLabels(convId, [...atuais, ...novas])
+      }
     }
     return { status: 'ok', contactId }
   } catch (e) {

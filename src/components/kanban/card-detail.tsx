@@ -64,6 +64,8 @@ interface CardDetailProps {
   /** Abre já no painel de perda (card arrastado p/ Perdido — motivo é obrigatório). */
   autoPerda?: boolean
   onSaved?: (t: TriagemLead) => void
+  /** Renderiza direto na página, sem modal (card dentro do Chatwoot — /embed/conversa). */
+  inline?: boolean
 }
 
 const FORMA_OPTIONS = [
@@ -153,7 +155,7 @@ function EventRow({ ev }: { ev: Evento }) {
   )
 }
 
-export function CardDetail({ triagem, open, onClose, autoInternar = false, autoPerda = false, onSaved }: CardDetailProps) {
+export function CardDetail({ triagem, open, onClose, autoInternar = false, autoPerda = false, onSaved, inline = false }: CardDetailProps) {
   const [form, setForm] = useState<Record<string, string>>({})
   const [editandoNome, setEditandoNome] = useState(false)
   const [nomeEdit, setNomeEdit] = useState('')
@@ -748,8 +750,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
   const inputCls =
     'w-full rounded bg-surface-tertiary border border-border text-sm text-content-primary placeholder:text-content-tertiary px-3 py-2.5 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500'
 
-  return (
-    <Modal open={open} onClose={onClose} title="Detalhes do contato" size="xl">
+  const corpo = (
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -866,7 +867,7 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
                 </div>
               )}
             </div>
-            {linkChatwoot && (
+            {linkChatwoot && !inline && (
               <a
                 href={linkChatwoot.url}
                 target="_blank"
@@ -1354,15 +1355,23 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              Fechar
-            </Button>
+            {!inline && (
+              <Button variant="ghost" size="sm" onClick={onClose}>
+                Fechar
+              </Button>
+            )}
             <Button size="sm" onClick={handleSave} loading={saving}>
               Salvar
             </Button>
           </div>
         </div>
       </div>
+  )
+
+  if (inline) return corpo
+  return (
+    <Modal open={open} onClose={onClose} title="Detalhes do contato" size="xl">
+      {corpo}
     </Modal>
   )
 }

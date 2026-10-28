@@ -34,8 +34,11 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
+  // O card dentro do Chatwoot (iframe) não pode redirecionar para /login: o login
+  // não abre em iframe (X-Frame-Options). A própria página mostra o "Entrar".
+  const isEmbed = request.nextUrl.pathname.startsWith('/embed')
 
-  if (!user && !isAuthRoute) {
+  if (!user && !isAuthRoute && !isEmbed) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

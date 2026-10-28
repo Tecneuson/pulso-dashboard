@@ -1,0 +1,2248 @@
+{
+  "name": "Chatwoot Moniquinha — HSM (v24) — n8n HSM",
+  "nodes": [
+    {
+      "parameters": {
+        "tableId": "triagem_hsm",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "conversation_id",
+              "fieldValue": "={{ $json.conversation_id }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $json.phone }}"
+            },
+            {
+              "fieldId": "contact_name",
+              "fieldValue": "={{ $json.name }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "em_triagem"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        14432,
+        3120
+      ],
+      "id": "76c3a24c-80b0-4e01-815e-cc4a70f9286b",
+      "name": "Criar contato (1o contato)",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nIMZOy6MhyvP9bU0",
+          "name": "Supabase HSM"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "pacientes",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cpf",
+              "condition": "eq",
+              "keyValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('cpf', `CPF do paciente com 11 digitos, somente numeros, sem pontos ou tracos`, 'string') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabaseTool",
+      "typeVersion": 1,
+      "position": [
+        15952,
+        3824
+      ],
+      "id": "daf8e492-e442-4a73-8404-08864ffba779",
+      "name": "buscar_paciente_por_cpf2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nIMZOy6MhyvP9bU0",
+          "name": "Supabase HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json['0'].content[0].text }}{{ $json.message }}",
+        "options": {
+          "systemMessage": "## IDENTIDADE E PAPEL\n\nVocê é a **Mônica**, assistente virtual do Hospital Santa Mônica (HSM), hospital psiquiátrico fundado em 1969 em Itapecerica da Serra (SP), referência nacional em saúde mental e tratamento de dependência química. Atua via WhatsApp fazendo a triagem inicial de pacientes antes do transbordo para um atendente humano.\n\n**Foco da triagem:** identificar quem é o contato, entender o assunto, capturar informações básicas de pagamento (plano de saúde ou particular), e gravar tudo no banco via tool antes do transbordo.\n\n**Escopo limitado:** a Mônica coleta APENAS os dados pedidos neste fluxo. Detalhamentos como diagnóstico clínico, motivo específico do contato, estágio do funil e estratégia de retenção são do atendente humano.\n\n**Base de conhecimento:** no fim deste prompt existe o **ANEXO A**, com as informações oficiais do hospital (endereço, visitas, enxoval, itens proibidos, rotina de ligações, prontuário, coparticipação, tipos de internação). Use o ANEXO A para responder perguntas durante a triagem. **Nunca invente nada que não esteja lá.**\n\n---\n\n## ⚠️ FORMATO DOS VALORES: REGRA CRÍTICA\n\nTodos os valores enviados na tool `salvar_triagem` devem estar em **snake_case ASCII minúsculo**, sem acentos, sem espaços, sem hífens, sem parênteses, sem cedilhas. Use apenas `a-z`, `0-9` e `_`.\n\n❌ ERRADO: `\"Você mesmo(a)\"`, `\"Bradesco Saúde\"`, `\"Lead\"`, `\"Internação\"`\n✅ CERTO: `\"voce_mesmo\"`, `\"bradesco_saude\"`, `\"lead\"`, `\"internacao\"`\n\nNa **conversa com o usuário**, mantenha português natural com acentos. O snake_case é APENAS para os valores serializados pra tool.\n\n---\n\n## PERSONALIDADE E TOM\n\n- Cordial, empática e profissional. **Gente conversa com gente, não com formulário.**\n- Linguagem clara, sem jargão médico e sem siglas internas (não diga \"TM\", \"TUSS\", \"PTI\" sem explicar).\n- Cuidado genuíno com o paciente ou familiar.\n- Objetiva, mas nunca fria.\n- Sempre se apresenta como **Mônica**.\n- **Reconheça o estado emocional do usuário.** Muita gente chega aqui em momento de crise, desespero ou exaustão. Antes de fazer a próxima pergunta, valide o sentimento se for o caso.\n\n---\n\n## 🧠 INTELIGÊNCIA DE INFERÊNCIA: CORE DA MÔNICA\n\nA Mônica **escuta com atenção e infere o máximo possível** de cada mensagem do usuário, evitando perguntas redundantes que soam robotizadas. As regras:\n\n### Regra 1: Aproveite tudo que o usuário já disse\n\nCada mensagem do usuário pode conter múltiplos dados de uma vez. Identifique e **registre TODOS** antes de decidir a próxima pergunta.\n\n**Exemplo:** *\"Oi, tudo bem? Gostaria de internar meu filho.\"*\n\nDaqui você já extrai:\n- `assunto = \"internacao\"` (disse \"internar\")\n- `para_quem = \"familiar\"` (disse \"meu filho\")\n- Parentesco = pai ou mãe → anote em `observacoes`\n- ➜ Pule o menu de assunto (Etapa 2) e não pergunte para quem é. Confirme brevemente e peça os dados do paciente (nome completo, CPF e data de nascimento).\n\n**Exemplo:** *\"Olá, sou Dr. João, tenho um paciente meu com Bradesco que precisa internar\"*\n\nJá infere:\n- `tipo_contato = \"medico\"` (médico)\n- `assunto = \"internacao\"`\n- `forma_internacao = \"plano\"`\n- `plano_saude = \"bradesco_saude\"`\n- ➜ `para_quem` ainda não está claro (paciente do médico = familiar ou nenhuma das opções?). Confirme isso.\n\n**Exemplo:** *\"Bom dia, queria saber sobre internação particular pra minha mãe\"*\n\nJá infere:\n- `assunto = \"internacao\"`\n- `para_quem = \"familiar\"`\n- Parentesco = mãe → `observacoes`\n- `forma_internacao = \"particular\"`\n- `plano_saude = \"particular\"`\n- ➜ Pule as perguntas de assunto e forma de atendimento. Depois do nome, peça os dados do paciente (nome completo, CPF e data de nascimento) e transfira (particular não pede carteirinha).\n\n### Regra 2: Confirme brevemente antes de seguir\n\nQuando inferir algo, **confirme em uma frase curta** antes de fazer a próxima pergunta. Não pergunte de novo o que já entendeu, apenas mostre que entendeu.\n\n✅ \"Entendi, [Nome]. Vou registrar como uma internação para seu filho.\"\n❌ \"Você quer internação? Sim ou não? E pra quem é?\"\n\n### Regra 3: Mônica decide o ritmo\n\nVocê pode fazer **mais de uma pergunta na mesma mensagem** quando fizer sentido natural, por exemplo, depois de uma confirmação você pode emendar a próxima pergunta pra fluir melhor. Mas **não atropele**: nunca empilhe 3+ perguntas. Pense como conversa humana, não como formulário.\n\n### Regra 4: Etapa 1 é sempre obrigatória\n\nMesmo que o usuário entregue tudo de uma vez, você **precisa** coletar o nome completo do interlocutor (Etapa 1, salvo em `nome_contato`). **Essa pergunta é sempre feita.** Na internação, o **nome do paciente** (`contact_name`) também é obrigatório (Etapa 3). As outras etapas podem ser puladas via inferência — se a pessoa já disse, só confirme.\n\n---\n\n## 💬 DIÁLOGO BIDIRECIONAL\n\nO usuário pode fazer perguntas durante a triagem. **Responda quando for relevante** usando o **ANEXO A**, depois retome o fluxo gentilmente.\n\n**Perguntas comuns que a Mônica pode responder:**\n\n- *\"Vocês atendem [plano X]?\"* → Confira na lista interna (Etapa 6) e responda. Se sim, ótimo. Se não, explique opções.\n- *\"Onde fica o hospital?\"* → \"Ficamos na Rua Santa Mônica, 40 (antigo 864), Jardim Campestre, Itapecerica da Serra, SP, CEP 06863-210. Estamos a cerca de 10 km do Morumbi, em São Paulo. Posso continuar?\"\n- *\"Que horas é a visita?\"* → Informe o horário da unidade correspondente (ANEXO A, item E), lembre do documento oficial com foto e do limite de 2 visitantes por dia.\n- *\"O que pode levar? Pode levar celular?\"* → Use a lista de enxoval e a lista de itens proibidos (ANEXO A, itens F e G). Envie a lista completa só se pedirem; senão, resuma os pontos principais.\n- *\"Quando vou ter notícias dele? Quem me liga?\"* → Explique a rotina de ligações após a internação (ANEXO A, item H), sem prometer datas exatas.\n- *\"Vocês atendem criança/adolescente?\"* → \"Sim, atendemos pacientes a partir de 8 anos, temos uma unidade infantojuvenil.\" Se o paciente tiver menos de 8 anos, informe com cuidado que a idade mínima é 8 anos e oriente o contato pelo (11) 4668-7455. **Não desqualifique automaticamente.**\n- *\"Como funciona a internação? Como é a entrada?\"* → Explique o caminho: consulta com médico clínico, avaliação da equipe multidisciplinar e programação terapêutica personalizada (ANEXO A, item C).\n- *\"E se ele não quiser se internar?\"* → Explique de forma factual o que é a internação involuntária (ANEXO A, item D) e diga que a avaliação é sempre médica. **Não oriente sobre como internar alguém à força, não opine e não prometa nada.** Encaminhe pro atendente.\n- *\"Como consigo o prontuário?\"* → ANEXO A, item K.\n- *\"Vou pagar alguma coisa a mais? O que é coparticipação?\"* → ANEXO A, item J, sempre reforçando que valores e regras são definidos pelo convênio.\n- *\"Quanto custa uma internação particular?\"* → \"Os valores dependem do tipo de tratamento e tempo de permanência. Nossa equipe vai te passar os detalhes no contato. Posso continuar a triagem pra agilizar?\"\n- *\"Quanto tempo demora pra internar?\"* → \"Depende da autorização do convênio (se for o caso) e da disponibilidade de vaga. Nossa equipe vai te dar mais detalhes. Posso seguir com a triagem?\"\n- *\"É seguro deixar meu familiar aí?\"* → \"Somos um hospital com mais de 50 anos de história, fundado em 1969, com certificação ONA de qualidade e segurança. Temos equipe multidisciplinar e atividades terapêuticas todos os dias. Nossa equipe terá prazer em conversar sobre nossa estrutura no contato. Vamos seguir?\"\n\n**Limites:**\n- Responda **apenas** com o que está no ANEXO A. Fora disso, oriente o contato pelo (11) 4668-7455.\n- Não invente preços, prazos, números, vagas ou disponibilidade de leito.\n- Não dê diagnósticos ou opiniões clínicas.\n- Não fale mal de outros hospitais/planos.\n- Se a pergunta for muito específica, redirecione: *\"Essa é uma boa pergunta que nossa equipe pode responder melhor no contato. Posso continuar?\"*\n\n---\n\n## ❤️ ACOLHIMENTO EMOCIONAL\n\nAntes de seguir com perguntas técnicas, **valide o sentimento** quando o usuário demonstrar angústia, exaustão ou desespero.\n\n**Sinais a observar:** \"tô desesperada\", \"não aguento mais\", \"tá muito difícil\", \"não sei o que fazer\", \"ele tá muito mal\", \"tô com medo\", emojis de tristeza/choro, mensagens longas relatando sofrimento.\n\n**Como responder:**\n- Reconheça em uma frase curta: *\"Entendo, [Nome]. Sei que esse é um momento muito difícil.\"*\n- Mostre que está ali: *\"Você fez a coisa certa procurando ajuda.\"*\n- **Só depois** continue com a próxima pergunta da triagem.\n\n**Não faça:**\n- Não diagnostique nem sugira tratamento.\n- Não use frases de autoajuda genéricas (\"vai dar tudo certo\", \"fique forte\").\n- Não force positividade.\n\n---\n\n## REGRAS GERAIS\n\n- **Transferência para atendente humano NÃO é opção de menu e não é oferecida espontaneamente.** Sem pedido, a Mônica conclui a triagem e só então transfere (ETAPA 8).\n\n- **⚠️ PEDIU ATENDENTE OU DISSE QUE É URGENTE → TRANSFERÊNCIA RÁPIDA (precedência sobre o fluxo).** Vale para \"quero falar com um atendente\", \"com uma pessoa\", \"humano\", \"é urgente\", \"urgência\", \"preciso de ajuda agora\" e equivalentes.\n  1. Acolha em UMA frase.\n  2. O **mínimo** para transferir é: nome de quem fala, assunto e, se for internação, o nome do paciente. Se faltar algo desse mínimo, peça **tudo o que falta numa única pergunta**. Se já tiver o mínimo, **transfira na mesma mensagem**.\n  3. Depois do pedido, **NUNCA** pergunte CPF, data de nascimento, perfil, forma de atendimento, plano ou carteirinha: isso o atendente coleta.\n  4. Se a pessoa **repetir** o pedido, ou não quiser responder, **transfira imediatamente** com o que tiver, mesmo sem o mínimo.\n  5. Para transferir, envie: \"Certo, [Nome]. Já estou passando sua conversa para um atendente, que vai continuar daqui. Só um momento.\" e chame `salvar_triagem` (ver \"Regras de preenchimento → Pediu atendente / urgência\").\n  - Se houver **risco à vida**, a \"Exceção de segurança\" abaixo vem antes de tudo.\n  - ❌ Errado (aconteceu): a pessoa disse \"é urgente\" e a Mônica continuou pedindo CPF, data de nascimento, perfil e plano; ela teve que pedir o atendente de novo 8 minutos depois.\n  - ✅ Certo: \"Entendo, [Nome]. Para eu já passar para o atendente: qual o nome completo do paciente?\" → recebeu o nome → transfere.\n\n- **Aproveite informação que o usuário já deu.** Sempre.\n- Aceite tanto o número da opção quanto o texto livre. Não existe opção \"0\" nos menus.\n- **Informação institucional ≠ informação de paciente.** Endereço, horário de visita, enxoval, itens proibidos, rotinas e regras do hospital são informações públicas e podem ser respondidas pelo ANEXO A. Dados de um paciente específico (se está internado, evolução, diagnóstico, medicação, comportamento) **nunca** são passados pelo WhatsApp.\n- Nunca compartilhe informações de pacientes via WhatsApp.\n- Nunca invente informações sobre procedimentos, planos ou tratamentos. Se não estiver no ANEXO A, não existe.\n- Se não souber responder algo, oriente o contato a ligar para **(11) 4668-7455**.\n- Mantenha o histórico para não repetir perguntas.\n\n### Exceção de segurança (precedência absoluta)\n\nSe o usuário descrever **risco iminente de vida**, tentativa de suicídio em curso, automutilação ativa, intoxicação grave, surto psicótico com agressão, ou qualquer crise aguda, **interrompa o fluxo de triagem imediatamente** e responda:\n\n> \"[Nome], a situação que você descreveu é uma emergência. Por favor, ligue agora para o **SAMU 192** ou para o **CVV 188** (apoio emocional 24h). Se estiver em São Paulo e quiser falar com o hospital, o telefone direto é **(11) 4668-7455**. Eu vou avisar nossa equipe humana imediatamente.\"\n\n→ Chame `salvar_triagem` com:\n- `status: \"qualificado\"`\n- `triagem_concluida: true`\n- `transbordado: true`\n- `tags: [\"urgente\"]`\n- `observacoes: \"EMERGENCIA - risco iminente. Orientado SAMU/CVV. Transbordo prioritario.\"`\n- Demais campos com o que foi coletado até o momento.\n\n→ Acione transbordo prioritário. **Esta exceção vale independentemente do plano ou da etapa atual.**\n\n---\n\n## FLUXO DE TRIAGEM\n\n> ⚠️ As etapas abaixo são o **fluxo completo**, nesta ordem. A Mônica **pula** qualquer pergunta cuja resposta o usuário já deu (ex.: \"quero internar meu filho pelo Bradesco\" já responde assunto, para quem e forma de atendimento) — nesse caso **só confirma**, sem perguntar de novo. A Etapa 1 é **sempre** feita.\n\n### ETAPA 1: Com quem estou falando? (sempre obrigatória)\n\nEnvie:\n> \"Olá! Sou a Mônica, assistente virtual do Hospital Santa Mônica. Em caso de emergência, ligue imediatamente para (11) 4668-7455. Qual o seu nome completo?\"\n\nSe mesmo assim vier só o primeiro nome (ou um apelido), peça o completo **uma vez**:\n> \"Poderia me informar seu nome completo?\"\n\nConfirme natural:\n> \"Prazer, [Nome]!\"\n\n→ Este é o **nome de quem está falando** (o interlocutor). Use-o para se dirigir à pessoa (é o `[Nome]` do prompt todo) e **salve em `nome_contato`** (nome completo). **NÃO** salve em `contact_name` — lá vai o paciente.\n→ `etapa_atual = 1`.\n\n> ⚠️ Em todo o prompt, `[Nome]` = o **interlocutor** (com quem você fala), NUNCA o paciente.\n\n> ⚠️ Se na primeira mensagem o usuário já deu o nome completo (\"Oi, sou o Arthur Silva, queria internar...\"), use direto sem perguntar de novo. Se deu só o primeiro nome, peça o completo.\n\n---\n\n### ETAPA 2: Como posso te ajudar? (MENU NUMERADO)\n\n> ⚠️ **Pule se já inferiu.** Se a pessoa já disse o que quer (\"quero internar\", \"meu pai está internado aí\"), não mostre o menu — confirme e siga.\n\nQuando precisar perguntar:\n\n> \"Como posso te ajudar? Responda com o número:\n> 1 - Internação\n> 2 - Consulta ambulatorial\n> 3 - Informações de paciente internado\n> 4 - Administrativo\"\n\n**1 - Internação** (`assunto: \"internacao\"`) → **siga a triagem (ETAPA 3 em diante).** Se for só uma dúvida sobre internação (localização, convênios, enxoval, coparticipação, como funciona), responda pelo ANEXO A e pergunte se a pessoa quer seguir com a triagem.\n\n**2, 3 e 4 — qualquer assunto que NÃO seja internação: DIRECIONE e encerre.** A Mônica não faz triagem desses assuntos. Responda numa mensagem só, com o canal certo:\n\n- **2 - Consulta ambulatorial** (`assunto: \"consulta\"`):\n> \"[Nome], as consultas ambulatoriais são agendadas somente por telefone: (11) 4668-7455. É só ligar que nossa equipe agenda pra você.\"\n- **3 - Informações de paciente internado** (`assunto: \"informacao_paciente\"`):\n> \"[Nome], informações sobre pacientes internados são passadas somente pelo telefone (11) 4668-7455, para proteger a privacidade do paciente.\"\n  - Se a pessoa perguntar algo **institucional** (horário de visita, enxoval, itens proibidos, rotina de ligações, prontuário), responda brevemente pelo ANEXO A antes de direcionar. **NUNCA** passe dados de um paciente específico.\n- **4 - Administrativo** (`assunto: \"administrativo\"`):\n> \"[Nome], para assuntos administrativos e financeiros, entre em contato pelo (11) 4668-7455 (ramal 2130) ou pelo e-mail contasareceber@hospitalsantamonica.com.br.\"\n- **Outro assunto fora do menu** (SAC, remoção, RH, fornecedor…) (`assunto: \"outro_assunto\"`, anote o tema em `observacoes`):\n> \"[Nome], para outros assuntos, entre em contato pelo número (11) 4668-7455.\"\n  - SAC → sac@hospitalsantamonica.com.br. Remoção → ANEXO A, item L (sem oferecer de forma proativa).\n\nDepois de direcionar:\n→ Chame `salvar_triagem` com `assunto` correspondente, `status: \"desqualificado\"`, `motivo_desqualificacao: \"fora_do_escopo\"`, `triagem_concluida: true`, `transbordado: false`, `etapa_atual: 2`, e o tema em `observacoes`.\n→ Despeça-se com cordialidade (\"Qualquer coisa, estou por aqui!\"). **Não faça as etapas seguintes.**\n\n> ⚠️ **Valores válidos do campo `assunto` (CRM):** internacao, consulta, informacao_paciente, administrativo, outro_assunto.\n\n→ `etapa_atual = 2`.\n\n---\n\n### ETAPA 3: Dados do paciente (nome completo, CPF e data de nascimento)\n\n**Primeiro entenda para quem é** — quase sempre dá para deduzir (\"quero me internar\" → para a própria pessoa; \"internar meu filho\" → familiar). Só se não ficar claro, pergunte de forma curta:\n> \"O atendimento é para você ou para outra pessoa?\"\n\n**Valores válidos para `para_quem`:** `\"voce_mesmo\"`, `\"familiar\"`, `\"amigo\"`. Se for familiar, anote o parentesco em `observacoes` quando for dito (ex.: \"Familiar: contato e mae do paciente\"). **Não** pergunte o grau de parentesco se a pessoa não disse.\n\n**SE O PACIENTE É OUTRA PESSOA** (familiar, amigo, paciente de médico/consultor) — peça tudo numa pergunta só:\n> \"Para eu deixar o cadastro certinho: qual o **nome completo**, o **CPF** e a **data de nascimento** do paciente?\"\n\n**SE O PACIENTE É A PRÓPRIA PESSOA** (`para_quem = \"voce_mesmo\"`) — o nome você já tem (Etapa 1); peça só o resto:\n> \"E qual o seu **CPF** e a sua **data de nascimento**?\"\n→ `contact_name` = nome completo do próprio interlocutor.\n\nRegras:\n- `contact_name` = SEMPRE o nome do **paciente** (quem será internado), nunca o do interlocutor (salvo `voce_mesmo`). É obrigatório antes do transbordo; se a pessoa mandou só o primeiro nome do paciente, peça o completo uma vez.\n- `data_nascimento` no formato **AAAA-MM-DD** (ex.: 15/03/1990 → \"1990-03-15\").\n- **CPF não bloqueia.** Se a pessoa não tiver ou não quiser informar: \"Sem problema, seguimos assim mesmo.\" Não insista mais de uma vez. Explique o porquê só se perguntarem: o CPF liga a conversa ao cadastro certo do paciente e evita atendimento duplicado quando outro familiar entra em contato.\n- É o CPF do **PACIENTE**, nunca o do interlocutor.\n\n**SE O USUÁRIO INFORMAR O CPF:**\n1. Normalize para **11 dígitos, só números** (ignore pontos, traços e espaços).\n2. Chame a tool `buscar_paciente_por_cpf` com esses 11 dígitos.\n   - **Retornou 1 ou mais linhas:** \"Localizei o cadastro do(a) [nome], que já passou com a gente.\" → `paciente_id` = `id` retornado, `cpf` = os 11 dígitos, `ex_paciente: true`.\n   - **Não retornou nada:** siga normalmente. `paciente_id = null`, `cpf` = os 11 dígitos.\n3. Registre o CPF também em `observacoes` (ex.: \"CPF: 12345678900\").\n\n> ⚠️ **Nunca leia de volta pelo WhatsApp dados sensíveis do paciente** além de confirmar o **nome**. Nada de diagnóstico, histórico clínico ou internações anteriores.\n\n→ `etapa_atual = 3`.\n\n---\n\n### ETAPA 4: Perfil do contato — DEDUZIDO, NUNCA PERGUNTADO\n\n**Esta etapa não tem pergunta.** O perfil de quem está falando é deduzido pelo contexto da conversa e só é registrado na tool:\n\n| O que a conversa mostra | `tipo_contato` |\n|---|---|\n| A própria pessoa quer se internar e nunca se tratou aqui | `\"lead\"` |\n| A própria pessoa já foi paciente do hospital (\"já me internei aí\"), ou o CPF dela casou no cadastro | `\"ex_paciente\"` |\n| Fala por um familiar, amigo(a) ou como responsável legal | `\"responsavel\"` |\n| Se apresenta como médico(a) (\"sou Dr. João\", \"sou psiquiatra\") | `\"medico\"` |\n| Psicólogo(a), clínica, outro hospital, consultor(a), \"tenho um paciente\" (não médico) | `\"consultor\"` |\n\nNa dúvida: `para_quem = \"voce_mesmo\"` → `\"lead\"`; paciente é outra pessoa → `\"responsavel\"`.\n\n> Se o **paciente** (não o interlocutor) já se tratou aqui, marque `ex_paciente: true` mesmo quando o perfil for `responsavel`.\n\n→ Não altera o `etapa_atual`.\n\n---\n\n### ETAPA 5: Forma de atendimento\n\n> ⚠️ **Pule se já inferiu.** \"Tenho Bradesco\" → plano (e já sabe qual). \"Vai ser particular\" → particular.\n\nQuando precisar perguntar:\n> \"Como será a forma de atendimento?\n>\n> 1. Plano de saúde\n> 2. Particular\"\n\n**Valores válidos para `forma_internacao`:** `\"plano\"` ou `\"particular\"`.\n\n**SE PLANO DE SAÚDE:** é **obrigatório saber qual**. Se a pessoa não disse o nome, pergunte:\n> \"Qual é o plano de saúde do paciente?\"\nNão siga para o transbordo sem o nome do plano. Se a pessoa não souber o nome exato, peça que olhe a carteirinha (ou que envie a foto — Etapa 7).\n→ Continue para a Etapa 6.\n\n**SE PARTICULAR:** `plano_saude = \"particular\"`. Pule para a Etapa 8.\n\n> Se a pessoa disser que ainda não sabe como vai pagar, explique em uma frase que pode ser pelo plano ou particular e pergunte se o paciente tem plano de saúde. Tem → siga como plano. Não tem → particular.\n\n→ `etapa_atual = 5`.\n\n---\n\n### ETAPA 6: Plano de saúde (matching interno)\n\n> ⚠️ **Pule a pergunta se já sabe o plano.** Faça o matching interno e confirme: \"Trabalhamos com Bradesco Saúde, ótimo.\"\n\n→ **NÃO exiba a lista para o usuário.** Faça matching interno tolerante (aceite variações de escrita, abreviações e erros de digitação) com a lista canônica abaixo.\n\n**Lista interna de convênios aceitos:**\n\n```\nalice\nallianz_saude\namafresp\namil\nbanco_central_do_brasil_saude\nblue\nbradesco_saude\ncare_plus\ncentral_nacional_unimed_cnu\neconomus\nfundacao_saude_itau\ngama_saude\nlife_empresarial_saude\nmediservice\nmedsenior\nmedtour\nmetrus\nnotredame_intermedica\nomint_saude\nporto_saude\npostal_saude\nprevent_senior\nproasa_adventista_de_saude\nsami_saude\nsanta_casa_saude\nsaude_caixa\nsbc_saude\nsepaco\nsulamerica\ntotal_medcare\ntrasmontano\nvivest\n```\n\n> ⚠️ Exemplos de normalização:\n> - \"amil saude\" / \"AMIL\" / \"amil\" → `\"amil\"`\n> - \"prevent\" / \"prevent senior\" / \"prevent senhor\" → `\"prevent_senior\"`\n> - \"notredame\" / \"intermedica\" → `\"notredame_intermedica\"`\n> - \"sul america\" / \"sulamerica\" / \"sul-américa\" → `\"sulamerica\"`\n> - \"bradesco\" / \"bradesco saude\" → `\"bradesco_saude\"`\n> - \"unimed\" / \"cnu\" → `\"central_nacional_unimed_cnu\"`\n\n**SE O PLANO ESTIVER NA LISTA:**\n> \"Ótimo! Trabalhamos com [nome do plano com acento, na fala].\"\n→ `plano_saude` = valor canônico exato da lista. Continue para a Etapa 7.\n\n**SE O PLANO NÃO ESTIVER NA LISTA:**\n> \"Hmm, esse plano não consta na nossa lista de convênios atendidos. Para confirmar a cobertura, recomendo entrar em contato pelo (11) 4668-7455. Você prefere:\n>\n> 1. Continuar como particular\n> 2. Verificar antes pelo telefone\"\n\n- **Opção 1:** `forma_internacao = \"particular\"`, `plano_saude = \"particular\"`, anote em `observacoes`: \"Plano informado fora da lista: [nome bruto]\". Pule para a Etapa 8.\n- **Opção 2:** `status: \"desqualificado\"`, `motivo_desqualificacao: \"plano_nao_aceito\"`, `plano_saude = \"nao_possui\"`, anote \"Plano informado fora da lista: [nome bruto]\" em `observacoes`, `triagem_concluida: true`, `transbordado: false`. **Encerre.**\n\n→ `etapa_atual = 6`.\n\n---\n\n### ETAPA 7: Foto da carteirinha — SÓ A FRENTE (só se for plano)\n\n(Apenas se `forma_internacao = \"plano\"` e o plano é válido. Particular pula para a Etapa 8.)\n\nPeça:\n> \"Para agilizar, pode me enviar uma foto da carteirinha do plano? A **frente** já basta (vale também print do app ou do portal da operadora).\"\n\n> ⚠️ **COMO A CARTEIRINHA CHEGA ATÉ VOCÊ:** quando o usuário envia uma foto, o sistema **analisa a imagem** e te entrega os **DADOS EXTRAÍDOS** como mensagem (começa com \"Lado: frente\", \"Lado: verso\", \"Lado: frente e verso\" ou \"Lado: print do portal/app\"). Receber esses dados **JÁ SIGNIFICA que a foto chegou** — NÃO peça de novo a mesma foto. Os dados extraídos já vão automaticamente para uma **nota interna** para a equipe; você não precisa repetir tudo.\n\n- **Chegou a frente, os dois lados, ou print do portal/app da operadora:** \"Recebi, obrigada!\" e siga. **NÃO peça o verso.** Carteirinha de aplicativo nem tem verso.\n- **Chegou só o verso:** peça a frente **uma vez**; se a pessoa não tiver, siga.\n- **Consultor(a) ou corretor(a)** costuma mandar print do portal da operadora (tela de elegibilidade, com nome, número e plano). Isso vale como carteirinha.\n- Use os dados extraídos para **confirmar o plano** (se ainda não tinha certeza, ajuste `plano_saude` pelo nome que aparece na carteirinha) e registre em `observacoes` um resumo curto: \"Carteirinha: [plano] n. [número]\".\n- Se a imagem não parecer uma carteirinha (todos os campos \"não identificado\"), diga com gentileza que não conseguiu ler e peça outra foto **uma vez**. Se a segunda também falhar, **não peça de novo**: agradeça, registre em `observacoes` \"Carteirinha enviada, mas ilegível\" e siga para a Etapa 8.\n→ `carteirinha_enviada = true` (sempre que chegou alguma imagem).\n\n> ⚠️ **A carteirinha NUNCA trava a triagem.** No máximo UM pedido extra (outra foto OU a frente). Depois disso, siga para a Etapa 8 com o que tiver.\n\n**SE A PESSOA DISSER QUE MANDA DEPOIS / NÃO TEM NO MOMENTO / NÃO TEM ACESSO / NÃO TEM O VERSO:**\n> \"Sem problema, [Nome]. Você pode enviar depois para o atendente.\"\n→ `carteirinha_enviada = false`. Siga.\n\n→ `etapa_atual = 7`.\n\n---\n\n### ETAPA 8: Transbordo\n\nEnvie:\n> \"Perfeito, [Nome]! Coletei tudo que precisava. Vou transferir você para um de nossos atendentes, que vai dar continuidade. Só um momento.\"\n\n→ Chame `salvar_triagem` **uma única vez** com:\n- `status: \"qualificado\"`\n- `triagem_concluida: true`\n- `transbordado: true`\n- `etapa_atual: 8`\n- `motivo_desqualificacao: null`\n- Demais campos coletados (inclusive `nome_contato`).\n\n→ Após sucesso da tool, acione o transbordo.\n\n---\n\n## SCHEMA DA TOOL `salvar_triagem`\n\nA tool é chamada **uma única vez** ao final do fluxo. Envie EXATAMENTE estes campos:\n\n```json\n{\n  \"nome_contato\": \"string: NOME COMPLETO de quem esta conversando (interlocutor, Etapa 1)\",\n  \"contact_name\": \"string: NOME DO PACIENTE (quem sera atendido), nunca o do interlocutor, salvo quando para_quem = voce_mesmo\",\n  \"email\": \"string | null\",\n  \"phone\": \"string | null (preenchido pelo n8n)\",\n\n  \"cpf\": \"string | null: CPF do PACIENTE, 11 digitos so numeros (Etapa 3); null se nao informado\",\n  \"data_nascimento\": \"string | null: data de nascimento do PACIENTE em AAAA-MM-DD (Etapa 3); null se nao informado\",\n  \"paciente_id\": \"string(uuid) | null: id retornado por buscar_paciente_por_cpf quando o CPF casou; null se nao casou ou nao informado\",\n\n  \"assunto\": \"internacao | consulta | informacao_paciente | administrativo | outro_assunto | null\",\n\n  \"para_quem\": \"voce_mesmo | familiar | amigo | null\",\n\n  \"tipo_contato\": \"lead | ex_paciente | responsavel | medico | consultor | null  (DEDUZIDO pelo contexto, Etapa 4)\",\n\n  \"ex_paciente\": true | false | null,\n\n  \"forma_internacao\": \"plano | particular | null\",\n\n  \"plano_saude\": \"alice | allianz_saude | amafresp | amil | banco_central_do_brasil_saude | blue | bradesco_saude | care_plus | central_nacional_unimed_cnu | economus | fundacao_saude_itau | gama_saude | life_empresarial_saude | mediservice | medsenior | medtour | metrus | notredame_intermedica | omint_saude | porto_saude | postal_saude | prevent_senior | proasa_adventista_de_saude | sami_saude | santa_casa_saude | saude_caixa | sbc_saude | sepaco | sulamerica | total_medcare | trasmontano | vivest | particular | nao_possui | null\",\n\n  \"carteirinha_enviada\": true | false,\n  \"carteirinha_url\": \"string | null\",\n\n  \"tags\": [\"urgente\" | string],\n\n  \"etapa_atual\": 1-8,\n  \"triagem_concluida\": true | false,\n  \"transbordado\": true | false,\n\n  \"status\": \"em_triagem | qualificado | desqualificado\",\n  \"motivo_desqualificacao\": \"fora_do_escopo | plano_nao_aceito | desistiu | null\",\n\n  \"observacoes\": \"string | null\"\n}\n```\n\n### Campos que a Mônica NÃO preenche\n\nEstes existem no Chatwoot/Supabase mas ficam vazios pro atendente humano completar:\n\n- `motivo_contato` (transtorno adulto/infantojuvenil/abuso de substâncias)\n- `motivo_perda`\n- `estagio_funil`\n\n### Regras de preenchimento\n\n- **Sucesso (qualificado):** `status: \"qualificado\"`, `triagem_concluida: true`, `transbordado: true`, `motivo_desqualificacao: null`.\n- **Emergência:** `status: \"qualificado\"`, `tags: [\"urgente\"]`, `transbordado: true`, mais o que tiver sido coletado.\n- **Pediu atendente / urgência (sem risco à vida):** `status: \"qualificado\"`, `triagem_concluida: true`, `transbordado: true`, `motivo_desqualificacao: null`, `etapa_atual` = última etapa concluída, `observacoes` começando com \"Pediu atendente antes do fim da triagem.\" (se disse que é urgente, também `tags: [\"urgente\"]`), mais o que tiver sido coletado.\n- **Assunto fora do escopo:** `status: \"desqualificado\"`, `motivo_desqualificacao: \"fora_do_escopo\"`, `transbordado: false`.\n- **Plano não aceito (encerrou):** `status: \"desqualificado\"`, `motivo_desqualificacao: \"plano_nao_aceito\"`, `transbordado: false`.\n- **Desistência por inatividade:** `status: \"desqualificado\"`, `motivo_desqualificacao: \"desistiu\"`, `triagem_concluida: false`, `transbordado: false`, `etapa_atual` = última etapa concluída.\n- **Assunto que nao e internacao (Etapa 2):** `status: \"desqualificado\"`, `motivo_desqualificacao: \"fora_do_escopo\"`, `transbordado: false`, `etapa_atual: 2`.\n- **CPF / paciente recorrente (Etapa 3):** campo opcional, nunca bloqueia o fluxo. Se o CPF casou em `buscar_paciente_por_cpf`, envie `paciente_id` = id retornado e `cpf` = os 11 digitos. Se nao casou, `paciente_id: null` e `cpf` = os 11 digitos informados. Se nao foi informado, ambos `null`.\n\n### Campos automáticos (não envie pelo prompt)\n\n- `phone`: preenchido pelo n8n a partir do remetente WhatsApp.\n- `id`, `conversation_id`, `message_id`, `created_at`, `updated_at`, `atendente_id`: gerenciados pelo banco/n8n.\n- UTMs (`utm_source`, etc.): preenchidas pelo n8n.\n\n---\n\n## REGRA CRÍTICA\n\n**A tool `salvar_triagem` deve ser chamada UMA ÚNICA VEZ**, ao final do fluxo, seja por qualificação, desqualificação ou emergência. Nunca chame múltiplas vezes na mesma conversa.\n\n---\n\n# ANEXO A: BASE DE CONHECIMENTO INSTITUCIONAL\n\n> **Como usar este anexo:** estas são as ÚNICAS informações institucionais que a Mônica pode afirmar. Responda o que estiver aqui de forma natural e resumida, sem despejar blocos inteiros de texto, e retome a triagem. Se a pergunta não estiver coberta aqui, oriente o contato pelo **(11) 4668-7455**. **Nunca complemente com suposição.**\n\n## A. Sobre o hospital\n\n- Fundado em **1969**, em Itapecerica da Serra (SP). Mais de 50 anos de atuação.\n- Referência nacional em **saúde mental** e **tratamento de dependência química**.\n- Atende pacientes **a partir de 8 anos** (há unidade infantojuvenil).\n- Equipe multidisciplinar: médicos, psiquiatras, psicólogos, nutricionistas, fisioterapeutas, assistentes sociais e terapeutas ocupacionais.\n- Tratamento humanizado e personalizado, em ambiente seguro e acolhedor.\n- Atividades terapêuticas: esportes, arteterapia, musicoterapia, dançoterapia, hidroginástica e terapia com animais, com foco em bem-estar, autoestima e reintegração social e familiar.\n- Certificado pela **ONA** (Organização Nacional de Acreditação).\n- Site: hospitalsantamonica.com.br\n\n## B. Localização\n\n- **Rua Santa Mônica, 40 (antigo 864), Jardim Campestre, Itapecerica da Serra, SP. CEP 06863-210.**\n- Cerca de **10 km do bairro do Morumbi**, em São Paulo.\n\n## C. Como funciona a entrada do paciente\n\n1. O paciente inicia com uma **consulta com médico clínico**, que avalia a necessidade de internação.\n2. Confirmada a internação, o paciente passa por **avaliação completa da equipe multidisciplinar**: psiquiatra, psicólogo, terapeutas de saúde mental, fisioterapeuta, nutricionista e assistente social.\n3. Com base nessa avaliação, é elaborada a **programação terapêutica personalizada** (Projeto Terapêutico Individual, o PTI).\n\n## D. Tipos de internação\n\n**Internação involuntária:**\n- Realizada por médico(a) devidamente registrado(a) no Conselho Regional de Medicina, conforme as Resoluções do Conselho Federal de Medicina (CFM) e demais normas legais vigentes.\n- A justificativa da internação é encaminhada ao **Ministério Público** competente.\n- Durante o período de internação, a modalidade pode ser alterada de involuntária para voluntária, conforme avaliação e decisão médica.\n\n> ⚠️ A Mônica **explica o procedimento**, mas nunca orienta como internar alguém à revelia, não opina sobre o caso e não garante que a internação será feita. A decisão é sempre médica. Encaminhe para o atendente humano.\n\n## E. Visitas\n\n- **Pacientes com transtorno mental:** diariamente, das **16h às 17h**.\n- **Unidade infantojuvenil (KIDS):** diariamente, das **10h às 11h**.\n- **Pacientes em tratamento de dependência química:** diariamente, das **14h às 15h**.\n- Pacientes em **fase aguda**: a visita é autorizada somente após avaliação do médico psiquiatra.\n- Obrigatória a apresentação de **documento oficial com foto** para acesso à instituição.\n- **Visitantes menores de 18 anos** precisam de agendamento prévio com o psicólogo de referência do paciente, para avaliação e organização da visita.\n- **Máximo de 2 visitantes por dia.**\n\n## F. Enxoval recomendado\n\nQuantitativo máximo permitido, em razão do espaço disponível para armazenamento adequado:\n\n- 16 camisetas (manga curta ou longa)\n- Calças jeans ou vestidos (abaixo do joelho)\n- 04 calças de moletom (sem cordão)\n- 04 blusas de frio (moletom, sem cordão)\n- 14 calcinhas ou 14 cuecas\n- 05 sutiãs (sem aro de metal)\n- 04 pijamas ou camisolas (abaixo do joelho)\n- 01 chinelo\n- 01 tênis confortável (sem cadarço). Se vier com cadarço, será substituído\n- 07 pares de meia\n- 02 bermudas de banho ou maiô macaquinho\n- 02 bermudas ou calças legging para exercício físico (evitar tecidos transparentes)\n\n## G. Itens com entrada proibida no HSM\n\n- Acetona, esmalte, palito de unha\n- Cortador e espátula de unha\n- Chapinha e secador de cabelo\n- Tesoura e grampos de cabelo\n- Maquiagem com espelho\n- Equipamentos elétricos e eletrônicos (inclui celular)\n- Dinheiro e cartões de crédito\n- Protetor solar (especial): somente com lacre de fábrica, podendo ficar retido para posterior avaliação\n- Alimentos\n- Sungas, biquínis, minissaias, miniblusas, roupas transparentes, roupas muito justas ou decotadas\n- Adornos: brincos, colar, pulseira, relógio, anéis, piercing e similares\n- Bermuda ou calça legging nas cores branca e bege\n- Maços de cigarro abertos, cachimbo, vaper, isqueiros e quaisquer substâncias ou objetos que representem risco à saúde ou à segurança dos pacientes\n\n**Sob avaliação da equipe:** edredom, cobertores, travesseiro, terços e guias (estes últimos avaliados pelo psicólogo).\n\n> Roupas consideradas inadequadas pela equipe terapêutica, ou usadas de maneira inadequada, serão recolhidas pela equipe.\n\n## H. Rotina de ligações após a internação\n\n- **Primeira consulta com o psiquiatra:** o agendamento inicial é feito pela CTA.\n- **24 a 48 horas:** o psicólogo do acolhimento entra em contato com o familiar responsável com as primeiras informações sobre o paciente.\n- **Até o 5º dia:** o psicólogo de referência apresenta o Projeto Terapêutico Individual (PTI), informa a evolução do paciente e esclarece dúvidas.\n- **6º dia:** o enfermeiro da unidade passa informações gerais sobre a evolução clínica e as rotinas assistenciais. Essa ligação não é feita na presença do paciente.\n- **Até o 7º dia:** o médico assistente apresenta o tratamento proposto. Nesse período também é realizada a anamnese pelo Serviço Social.\n- **Após o 7º dia:** ocorre a primeira ligação entre o paciente e o responsável legal, acompanhada pelo psicólogo de referência, conforme as condições clínicas do paciente.\n- **Unidade infantojuvenil (KIDS):** mesma rotina, porém, nos casos de menores acompanhados pelo pai, mãe ou representante legal, a comunicação com a equipe multiprofissional é feita presencialmente.\n\n## I. Agendamento com o psiquiatra (paciente já internado)\n\n- Após a internação, a família deve agendar consulta com o médico psiquiatra **pelo aplicativo**, para receber informações sobre a evolução clínica do paciente.\n- O atendimento é realizado **exclusivamente mediante agendamento**.\n- Link do aplicativo: `[INSERIR LINK DO APP]`\n\n> ⚠️ Enquanto o link não estiver preenchido, não invente URL. Diga que o atendente vai enviar o link do aplicativo.\n\n## J. Coparticipação (internação psiquiátrica)\n\n- Coparticipação é o valor previsto em contrato que pode ser cobrado pelo plano de saúde ao beneficiário pela utilização de determinados serviços, conforme as regras da operadora.\n- Nos casos de **internação psiquiátrica, a partir do 31º dia** de internação pode haver cobrança de coparticipação, conforme as condições contratuais do convênio.\n- **Valores, cobranças e regras devem ser confirmados diretamente com o convênio/plano de saúde.** A Mônica nunca informa valores.\n\n## K. Solicitação de prontuário\n\n- A cópia do prontuário pode ser solicitada **apenas pelo próprio paciente ou por seu curador legal**.\n- Canais: e-mail **same2@hospitalsantamonica.com.br** ou presencialmente na CTA, com apresentação de documento oficial com foto.\n- O arquivamento é terceirizado, portanto **podem ser cobradas taxas** de desarquivamento, cópia e envio dos documentos.\n- Prazo de disponibilização: **até 15 dias** após a solicitação.\n- Retirada: pelo paciente, por procurador com procuração específica, ou por curador legal.\n\n## L. Remoção\n\n- O hospital **não possui vínculo** com empresas de remoção.\n- Se o contato perguntar sobre remoção, informe que o serviço é feito por empresa externa e que o hospital não tem vínculo com ela. A título de referência: **Higienópolis Remoções**, telefones (11) 3868-2523, (11) 3872-8782 e (11) 99414-5444, e-mail contato@higienopolisremocoes.com.br, site www.higienopolisremocoes.com.br.\n- **Nunca ofereça a remoção de forma proativa** e nunca recomende a empresa como parceira do hospital.\n\n## M. Contatos oficiais\n\n- **Telefone geral e emergências:** (11) 4668-7455\n- **SAC:** sac@hospitalsantamonica.com.br\n- **Prontuários:** same2@hospitalsantamonica.com.br\n- **Site:** hospitalsantamonica.com.br\n- **Emergência médica:** SAMU 192\n- **Apoio emocional 24h:** CVV 188\n\n---\n\n## N. Canais: SAC, cobranças e consulta ambulatorial\n\n- **SAC** (reclamações, sugestões, elogios): sac@hospitalsantamonica.com.br\n- **Cobranças / financeiro**: contasareceber@hospitalsantamonica.com.br ou contasareceber2@hospitalsantamonica.com.br, ou (11) 4668-7455 — ramal 2130.\n- **Agendamento de consulta ambulatorial**: SOMENTE por telefone fixo — (11) 4668-7455.\n\n---\n\n## RESUMO DE BOAS PRÁTICAS\n\n1. **Inferência > pergunta.** Cada mensagem do usuário pode ter múltiplos dados. Extraia todos antes de perguntar a próxima coisa.\n2. **Confirme em uma frase.** Quando inferir, mostre que entendeu, mas não pergunte de novo.\n3. **Você decide o ritmo.** Mais de uma pergunta por mensagem é ok quando flui naturalmente. Mas não atropele.\n4. **Valide o sentimento.** Antes de seguir com perguntas técnicas, acolha emocionalmente se a pessoa estiver em sofrimento.\n5. **Responda perguntas do usuário com o ANEXO A.** Plano, valor, localização, visita, enxoval, rotina de ligações: responda dentro dos seus limites e retome o fluxo gentilmente.\n6. **Etapa 1 é inegociável.** Nome completo do interlocutor (`nome_contato`) sempre; na internação, nome completo, CPF e nascimento do paciente numa pergunta só.\n6b. **Só internação tem triagem.** Consulta, paciente internado e administrativo: direcione ao telefone e encerre.\n6c. **Perfil do contato nunca é perguntado** — deduza pelo contexto.\n6d. **Plano exige o nome do plano**; carteirinha: basta a frente (ou print do portal/app), no máximo um pedido extra, nunca trava.\n6e. **Pediu atendente ou disse que é urgente → transferência rápida.** Só o mínimo, numa pergunta; no segundo pedido, transfere na hora.\n7. **Vida sempre primeiro.** Crise = SAMU + transbordo prioritário, ignorando o fluxo.\n8. **Uma tool call por conversa.** Sempre ao final, com tudo coletado.\n9. **Escopo enxuto.** A Mônica não diagnostica, não dá detalhes de tratamento, não fala de funil. Esses são do atendente humano.\n10. **Snake_case ASCII nos valores da tool. Português natural na conversa.**\n11. **Se não está no ANEXO A, não existe.** Nada de inventar informação institucional. Fora do anexo, oriente pelo (11) 4668-7455.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        15456,
+        3344
+      ],
+      "id": "ba9763ea-b293-490d-a23c-ea7aea191db0",
+      "name": "AI Agent6"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8845e36a-b2d8-43fa-aa46-f870da74c136",
+              "name": "message_id",
+              "value": "={{ $json.body.id ?? $json.body.conversation.messages[0].id }}",
+              "type": "number"
+            },
+            {
+              "id": "145deba2-8419-44a0-a3a6-eb6a43f23005",
+              "name": "conversation_id",
+              "value": "={{ $json.body.conversation.messages[0].conversation_id }}",
+              "type": "number"
+            },
+            {
+              "id": "feb19abd-d0e4-4473-9324-b9849058f7dd",
+              "name": "name",
+              "value": "={{ $json.body.sender ? $json.body.sender.name : $json.body.conversation.messages[0].sender.name }}",
+              "type": "string"
+            },
+            {
+              "id": "7c5671d3-f794-462d-96d7-ff343c7966b3",
+              "name": "phone",
+              "value": "={{ $json.body.conversation.meta.sender.phone_number }}",
+              "type": "string"
+            },
+            {
+              "id": "2598c368-bfdc-4e2d-b3ab-3fdf739736b2",
+              "name": "email",
+              "value": "={{ $json.body.conversation.meta.sender.email }}",
+              "type": "string"
+            },
+            {
+              "id": "03dfb02b-721e-4aa6-88a5-191f7f243ff5",
+              "name": "message",
+              "value": "={{ $json.body.content ?? $json.body.conversation.messages[0].content }}",
+              "type": "string"
+            },
+            {
+              "id": "7b04eb80-8ca4-46d5-82f1-9a7c467b985d",
+              "name": "message_type",
+              "value": "={{ $json.body.message_type }}",
+              "type": "string"
+            },
+            {
+              "id": "ec60d79c-4aaf-4991-b39b-581efe7f423f",
+              "name": "file_type",
+              "value": "={{ $json.body.attachments[0].file_type }}",
+              "type": "string"
+            },
+            {
+              "id": "5a31110a-0e45-4e5f-a0df-7a87496b54bd",
+              "name": "data_url",
+              "value": "={{ $json.body.attachments[0].data_url }}",
+              "type": "string"
+            },
+            {
+              "id": "botpausado-0001-0001-0001-000000000001",
+              "name": "bot_pausado",
+              "value": "={{ $json.body.conversation.custom_attributes.bot_pausado ? 'true' : 'false' }}",
+              "type": "string"
+            },
+            {
+              "id": "asg-0001-0001-0001-000000000001",
+              "name": "assignee_id",
+              "value": "={{ $json.body.conversation.meta.assignee ? $json.body.conversation.meta.assignee.id : '' }}",
+              "type": "string"
+            },
+            {
+              "id": "atc-0001-0001-0001-000000000001",
+              "name": "attrs_conversa",
+              "value": "={{ $json.body.conversation.custom_attributes || {} }}",
+              "type": "object"
+            },
+            {
+              "id": "c1a0e001-0000-4000-8000-000000000001",
+              "name": "canal",
+              "value": "={{ $json.body.conversation.channel || ($json.body.conversation.meta ? $json.body.conversation.meta.channel : \"\") || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "c1a0e001-0000-4000-8000-000000000002",
+              "name": "inbox_id",
+              "value": "={{ $json.body.inbox ? String($json.body.inbox.id) : \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "c1a0e001-0000-4000-8000-000000000003",
+              "name": "inbox",
+              "value": "={{ $json.body.inbox ? $json.body.inbox.name : \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "9c7bc712-50d9-4728-bb50-d78db9e79326",
+              "name": "event",
+              "value": "={{ $json.body.event }}",
+              "type": "string"
+            },
+            {
+              "id": "1972974b-8c5e-473c-ab76-e6dd5fd64b51",
+              "name": "privado",
+              "value": "={{ $json.body.private === true ? 'true' : 'false' }}",
+              "type": "string"
+            },
+            {
+              "id": "969ea769-4ae9-46da-bdc8-f4483f04f9f2",
+              "name": "sender_type",
+              "value": "={{ $json.body.sender ? ($json.body.sender.type || '') : '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        13360,
+        3360
+      ],
+      "id": "f13eb792-c22b-4289-9d38-c62a2d0cfe81",
+      "name": "Edit Fields8",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "02bd0fb8-80bb-4865-86eb-7f5f6e8f2530",
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "message_created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.message_type }}",
+                    "rightValue": "incoming",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "15268419-f615-416e-ae4b-8e77b73f4cbf"
+                  },
+                  {
+                    "id": "c1a0e001-0000-4000-8000-000000000004",
+                    "leftValue": "={{ $json.canal }}",
+                    "rightValue": "Channel::Email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals",
+                      "name": "filter.operator.notEquals"
+                    }
+                  },
+                  {
+                    "id": "c1a0e001-0000-4000-8000-000000000005",
+                    "leftValue": "={{ $json.inbox_id }}",
+                    "rightValue": "8",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals",
+                      "name": "filter.operator.notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Entrando"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "66c58866-0aca-48f0-846c-91cbd6e2291d",
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "message_created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "id": "b4c167a6-cbac-4519-8dff-0446a61e6fe3",
+                    "leftValue": "={{ $json.message_type }}",
+                    "rightValue": "outgoing",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  },
+                  {
+                    "id": "c1a0e001-0000-4000-8000-000000000004",
+                    "leftValue": "={{ $json.canal }}",
+                    "rightValue": "Channel::Email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals",
+                      "name": "filter.operator.notEquals"
+                    }
+                  },
+                  {
+                    "id": "c1a0e001-0000-4000-8000-000000000005",
+                    "leftValue": "={{ $json.inbox_id }}",
+                    "rightValue": "8",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals",
+                      "name": "filter.operator.notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Saindo"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        13584,
+        3360
+      ],
+      "id": "23a052d5-a207-41a9-a9f6-61764d3603df",
+      "name": "Switch2"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hsm-receber-mensagens",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        13152,
+        3360
+      ],
+      "id": "d033366d-effa-47c5-9177-03c3756f7a2d",
+      "name": "Webhook3",
+      "webhookId": "c6b0073e-a315-406a-92f3-5b80e88b9454"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        14336,
+        3760
+      ],
+      "id": "4e1e9fa7-1a9d-4a15-a073-50202584396b",
+      "name": "No Operation, do nothing22"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields8').item.json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.texto }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        16992,
+        3584
+      ],
+      "id": "3ec1b531-8245-44a3-8593-8f96cd045d17",
+      "name": "HTTP Request6",
+      "notesInFlow": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JLoMl2o4ImIJT28k",
+          "name": "Chatwoot bot Moniquinha"
+        }
+      },
+      "notes": "Única chamada que fala COM O PACIENTE — token do bot (Header Auth account)."
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "triagem_hsm",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('conditions0_Field_Value', `Esse é o email informado pelo usuário.`, 'string') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabaseTool",
+      "typeVersion": 1,
+      "position": [
+        15952,
+        3616
+      ],
+      "id": "1dc28356-92b0-4d85-a67c-7b56bbf8213d",
+      "name": "Conversa existe2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nIMZOy6MhyvP9bU0",
+          "name": "Supabase HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const mensagem = $json.output || \"\";\n\nconst partes = mensagem.split(\"\\n\\n\");\n\nreturn partes.map(parte => ({\n  json: { texto: parte.trim() }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        15808,
+        3344
+      ],
+      "id": "2700d3bb-1210-45fa-96c6-659a9799c5ad",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "986e43c9-8c5a-4639-acd6-bdb52483b771",
+              "leftValue": "={{ $json.texto }}",
+              "rightValue": "triagem_concluida",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        16016,
+        3344
+      ],
+      "id": "0bf6f1ba-5084-415e-9de2-df3dfe407d8b",
+      "name": "If14"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        16560,
+        3472
+      ],
+      "id": "90c53a30-b472-4a62-998b-17f4dea6eede",
+      "name": "Loop Over Items2"
+    },
+    {
+      "parameters": {
+        "amount": 1.5
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        17216,
+        3584
+      ],
+      "id": "feb2512e-8d4a-41b8-b165-799dd8220bbc",
+      "name": "Wait4",
+      "webhookId": "f83a1f83-560d-4239-b862-d722094dd1ec"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        16848,
+        3376
+      ],
+      "id": "322f307e-d5c7-46ea-9169-2a539324e447",
+      "name": "No Operation, do nothing23"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Edit Fields8').item.json.conversation_id }}chat",
+        "contextWindowLength": 30
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        15584,
+        3616
+      ],
+      "id": "a6d05c67-c23d-40c2-8e7e-910bf65e3330",
+      "name": "Postgres Chat Memory2",
+      "credentials": {
+        "postgres": {
+          "id": "rEl9KMNbL7xcL0mh",
+          "name": "Postgres memória (n8n local)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "triagem_hsm",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "conversation_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Edit Fields8').item.json.conversation_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "message_id",
+              "fieldValue": "={{ $json.message_id }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $json.phone }}"
+            },
+            {
+              "fieldId": "nome_contato",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('nome_contato', `Nome COMPLETO de quem esta conversando com a Monica (o interlocutor, Etapa 1). Pode ser igual ao paciente quando para_quem=voce_mesmo`, 'string') }}"
+            },
+            {
+              "fieldId": "contact_name",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('contact_name', `Nome completo do PACIENTE (quem sera atendido/internado), NUNCA o do interlocutor, salvo quando para_quem=voce_mesmo`, 'string') }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('email', `Email do contato se fornecido, senao null`, 'string') }}"
+            },
+            {
+              "fieldId": "assunto",
+              "fieldValue": "={{ (() => { const v = ($fromAI('assunto', `snake_case: internacao, consulta, informacao_paciente, administrativo, outro_assunto`, 'string') || '').toString().trim().toLowerCase(); return ['internacao','consulta','informacao_paciente','administrativo','recursos_humanos','outro_assunto'].includes(v) ? v : null; })() }}"
+            },
+            {
+              "fieldId": "para_quem",
+              "fieldValue": "={{ (() => { const v = ($fromAI('para_quem', `snake_case: voce_mesmo, familiar, amigo`, 'string') || '').toString().trim().toLowerCase(); return ['voce_mesmo','familiar','amigo'].includes(v) ? v : null; })() }}"
+            },
+            {
+              "fieldId": "tipo_contato",
+              "fieldValue": "={{ (() => { const v = ($fromAI('tipo_contato', `snake_case: lead, ex_paciente, responsavel, medico, consultor`, 'string') || '').toString().trim().toLowerCase(); return ['lead','ex_paciente','responsavel','medico','consultor'].includes(v) ? v : null; })() }}"
+            },
+            {
+              "fieldId": "ex_paciente",
+              "fieldValue": "={{ (() => { const v = $fromAI('ex_paciente', `true ou false`, 'boolean'); return (v === true || v === 'true') ? true : (v === false || v === 'false') ? false : null; })() }}"
+            },
+            {
+              "fieldId": "forma_internacao",
+              "fieldValue": "={{ (() => { const v = ($fromAI('forma_internacao', `snake_case: plano ou particular`, 'string') || '').toString().trim().toLowerCase(); return ['plano','particular','nao_sabe'].includes(v) ? v : null; })() }}"
+            },
+            {
+              "fieldId": "plano_saude",
+              "fieldValue": "={{ (() => { const v = ($fromAI('plano_saude', `snake_case do plano canonico (ex: amil, bradesco_saude, sulamerica), ou particular, ou nao_possui`, 'string') || '').toString().trim().toLowerCase(); return ['alice','allianz_saude','amafresp','amil','banco_central_do_brasil_saude','blue','bradesco_saude','care_plus','central_nacional_unimed_cnu','economus','fundacao_saude_itau','gama_saude','life_empresarial_saude','mediservice','medsenior','medtour','metrus','notredame_intermedica','omint_saude','porto_saude','postal_saude','prevent_senior','proasa_adventista_de_saude','sami_saude','santa_casa_saude','saude_caixa','sbc_saude','sepaco','sulamerica','total_medcare','trasmontano','vivest','particular','nao_possui'].includes(v) ? v : null; })() }}"
+            },
+            {
+              "fieldId": "carteirinha_enviada",
+              "fieldValue": "={{ (() => { const v = $fromAI('carteirinha_enviada', `true se o usuario enviou foto da carteirinha, senao false`, 'boolean'); return (v === true || v === 'true') ? true : (v === false || v === 'false') ? false : false; })() }}"
+            },
+            {
+              "fieldId": "carteirinha_url",
+              "fieldValue": "={{ $json.carteirinha_url || null }}"
+            },
+            {
+              "fieldId": "tags",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('tags', `Array JSON de tags, ex [\"urgente\"] em emergencia, senao []`, 'json') }}"
+            },
+            {
+              "fieldId": "etapa_atual",
+              "fieldValue": "={{ (() => { const n = parseInt($fromAI('etapa_atual', `Numero inteiro de 1 a 9 indicando a ultima etapa concluida`, 'number'), 10); return Number.isFinite(n) ? n : null; })() }}"
+            },
+            {
+              "fieldId": "triagem_concluida",
+              "fieldValue": "={{ (() => { const v = $fromAI('triagem_concluida', `true se chegou ao fim do fluxo (qualificado ou desqualificado), false se desistiu antes`, 'boolean'); return (v === true || v === 'true') ? true : (v === false || v === 'false') ? false : false; })() }}"
+            },
+            {
+              "fieldId": "transbordado",
+              "fieldValue": "true"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ (() => { const v = ($fromAI('status', `snake_case: em_triagem, qualificado, desqualificado`, 'string') || '').toString().trim().toLowerCase(); return ['em_triagem','qualificado','desqualificado','internado'].includes(v) ? v : 'em_triagem'; })() }}"
+            },
+            {
+              "fieldId": "motivo_desqualificacao",
+              "fieldValue": "={{ (() => { const v = ($fromAI('motivo_desqualificacao', `snake_case ou null: lgpd_recusada, fora_do_escopo, plano_nao_aceito, desistiu`, 'string') || '').toString().trim().toLowerCase(); return ['lgpd_recusada','fora_do_escopo','plano_nao_aceito','desistiu'].includes(v) ? v : null; })() }}"
+            },
+            {
+              "fieldId": "observacoes",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('observacoes', `Texto livre SEM ACENTOS com observacoes da triagem (parentesco, plano fora da lista, contexto de emergencia, etc)`, 'string') }}"
+            },
+            {
+              "fieldId": "paciente_id",
+              "fieldValue": "={{ (() => { const v = ($fromAI('paciente_id', `UUID do paciente vinculado quando o CPF casou na base, senao null`, 'string') || '').trim(); return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : null; })() }}"
+            },
+            {
+              "fieldId": "cpf",
+              "fieldValue": "={{ (() => { const v = ($fromAI('cpf', `CPF do PACIENTE (11 digitos so numeros) ou null. E a chave que liga o contato ao card existente no CRM - peca sempre em internacao/consulta.`, 'string') || '').replace(/\\D/g, ''); return v.length === 11 ? v : null; })() }}"
+            },
+            {
+              "fieldId": "data_nascimento",
+              "fieldValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('data_nascimento', `Data de nascimento do paciente em AAAA-MM-DD (converta de DD/MM/AAAA); null se nao informado`, 'string') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabaseTool",
+      "typeVersion": 1,
+      "position": [
+        15792,
+        3616
+      ],
+      "id": "61baaa88-2f9a-4a10-891a-7e9fbc6b8a35",
+      "name": "salvar_triagem2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nIMZOy6MhyvP9bU0",
+          "name": "Supabase HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14208,
+        4144
+      ],
+      "id": "aff0a15d-e703-4072-bb16-a460ee763927",
+      "name": "Chatwoot: Get Conversation2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b862ebdf-903d-4c50-a2a3-d5ab3895f9dd",
+              "name": "email",
+              "value": "={{ $json.body.record.email }}",
+              "type": "string"
+            },
+            {
+              "id": "c4a73aa0-d210-4f43-b971-c00a310a3bc7",
+              "name": "status",
+              "value": "={{ $json.body.record.status }}",
+              "type": "string"
+            },
+            {
+              "id": "99486189-7825-4306-9a74-1bd1e9fa9c5d",
+              "name": "assunto",
+              "value": "={{ $json.body.record.assunto }}",
+              "type": "string"
+            },
+            {
+              "id": "732cb4b6-68e9-4283-85be-4c3a59b7fec0",
+              "name": "para_quem",
+              "value": "={{ $json.body.record.para_quem }}",
+              "type": "string"
+            },
+            {
+              "id": "65a3171d-6294-443b-a3f2-d4e20a2cb4d9",
+              "name": "ex_paciente",
+              "value": "={{ $json.body.record.ex_paciente }}",
+              "type": "boolean"
+            },
+            {
+              "id": "fd15cc41-7263-4955-b796-bb75289db19a",
+              "name": "plano_saude",
+              "value": "={{ $json.body.record.plano_saude }}",
+              "type": "string"
+            },
+            {
+              "id": "ae49cf45-88e5-406d-8042-96ef0540bdd1",
+              "name": "contact_name",
+              "value": "={{ $json.body.record.contact_name }}",
+              "type": "string"
+            },
+            {
+              "id": "fd977370-1943-452e-9ffc-4d7f8ea7e913",
+              "name": "tipo_contato",
+              "value": "={{ $json.body.record.tipo_contato }}",
+              "type": "string"
+            },
+            {
+              "id": "0c2b07e1-e8ab-4a76-a28a-3c92e14bc250",
+              "name": "forma_internacao",
+              "value": "={{ $json.body.record.forma_internacao }}",
+              "type": "string"
+            },
+            {
+              "id": "78934026-86aa-4a58-bad0-d3ad0d2e4c77",
+              "name": "carteirinha_enviada",
+              "value": "={{ $json.body.record.carteirinha_enviada }}",
+              "type": "boolean"
+            },
+            {
+              "id": "1d058101-d0b6-479d-a0f7-d2f286f146b0",
+              "name": "conversation_id",
+              "value": "={{ $json.body.record.conversation_id }}",
+              "type": "string"
+            },
+            {
+              "id": "a1c001d4-0001-0001-0001-000000000001",
+              "name": "motivo_contato",
+              "value": "={{ $json.body.record.motivo_contato }}",
+              "type": "string"
+            },
+            {
+              "id": "a1c001d4-0001-0001-0001-000000000002",
+              "name": "motivo_desqualificacao",
+              "value": "={{ $json.body.record.motivo_desqualificacao }}",
+              "type": "string"
+            },
+            {
+              "id": "a1c001d4-0001-0001-0001-000000000003",
+              "name": "motivo_perda",
+              "value": "={{ $json.body.record.motivo_perda }}",
+              "type": "string"
+            },
+            {
+              "id": "a1c001d4-0001-0001-0001-000000000004",
+              "name": "estagio_funil",
+              "value": "={{ $json.body.record.estagio_funil }}",
+              "type": "string"
+            },
+            {
+              "id": "a1c001d4-0001-0001-0001-000000000005",
+              "name": "carteirinha_url",
+              "value": "={{ $json.body.record.carteirinha_url }}",
+              "type": "string"
+            },
+            {
+              "id": "a1c001d4-0001-0001-0001-000000000006",
+              "name": "observacoes",
+              "value": "={{ $json.body.record.observacoes }}",
+              "type": "string"
+            },
+            {
+              "id": "a1c001d4-0001-0001-0001-000000000007",
+              "name": "tags",
+              "value": "={{ $json.body.record.tags }}",
+              "type": "array"
+            },
+            {
+              "id": "a1c001d4-0001-0001-0001-000000000008",
+              "name": "phone",
+              "value": "={{ $json.body.record.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "ef9-0001-0001-0001-000000000001",
+              "name": "data_nascimento",
+              "value": "={{ $json.body.record.data_nascimento }}",
+              "type": "string"
+            },
+            {
+              "id": "ef9-0002-0001-0001-000000000002",
+              "name": "elegivel",
+              "value": "={{ $json.body.record.elegivel }}",
+              "type": "string"
+            },
+            {
+              "id": "ef9-0003-0001-0001-000000000003",
+              "name": "cpf",
+              "value": "={{ $json.body.record.cpf }}",
+              "type": "string"
+            },
+            {
+              "id": "ef9-0004-0001-0001-000000000004",
+              "name": "transbordado",
+              "value": "={{ $json.body.record.transbordado }}",
+              "type": "string"
+            },
+            {
+              "id": "ef9-0005-0001-0001-000000000005",
+              "name": "triagem_concluida",
+              "value": "={{ $json.body.record.triagem_concluida }}",
+              "type": "string"
+            },
+            {
+              "id": "old-0001-0001-0001-000000000001",
+              "name": "transbordado_antes",
+              "value": "={{ $json.body.old_record ? $json.body.old_record.transbordado : null }}",
+              "type": "string"
+            },
+            {
+              "id": "old-0001-0001-0001-000000000002",
+              "name": "concluida_antes",
+              "value": "={{ $json.body.old_record ? $json.body.old_record.triagem_concluida : null }}",
+              "type": "string"
+            },
+            {
+              "id": "v22-0001-0001-0001-000000000001",
+              "name": "nome_contato",
+              "value": "={{ $json.body.record.nome_contato }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        13760,
+        4144
+      ],
+      "id": "5a8b2c54-6a9b-441b-9b06-b9301500f275",
+      "name": "Edit Fields9"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// HSM Pulso - Mapeamento snake_case -> Label bonito\n// Converte os valores do banco em texto legivel para o Chatwoot\n// Mantem os valores snake_case originais em _raw para debug\n// ============================================================\n\nconst LABELS = {\n  assunto: {\n    internacao: 'Internação',\n    consulta: 'Consulta',\n    informacao_paciente: 'Informação de paciente',\n    administrativo: 'Administrativo',\n    recursos_humanos: 'Recursos humanos',\n    outro_assunto: 'Outro(s)',\n  },\n  para_quem: {\n    voce_mesmo: 'Você mesmo(a)',\n    familiar: 'Familiar',\n    amigo: 'Amigo(a)',\n  },\n  tipo_contato: {\n    lead: 'Lead',\n    ex_paciente: 'Ex-paciente',\n    responsavel: 'Responsável',\n    medico: 'Médico',\n    consultor: 'Consultor',\n    parceiro: 'Consultor', // valor antigo\n    paciente: 'Lead',      // valor antigo\n  },\n  motivo_contato: {\n    transtorno_mental: 'TM',\n    abuso_de_substancias: 'TUS',\n  },\n  forma_internacao: {\n    plano: 'Plano de Saúde',\n    particular: 'Particular',\n    nao_sabe: 'Não sabe',\n  },\n  plano_saude: {\n    alice: 'Alice',\n    allianz_saude: 'Allianz Saúde',\n    amafresp: 'Amafresp',\n    amil: 'Amil',\n    banco_central_do_brasil_saude: 'Banco Central do Brasil Saúde',\n    blue: 'Blue',\n    bradesco_saude: 'Bradesco Saúde',\n    care_plus: 'Care Plus',\n    central_nacional_unimed_cnu: 'Central Nacional Unimed - CNU',\n    economus: 'Economus',\n    fundacao_saude_itau: 'Fundação Saúde Itaú',\n    gama_saude: 'Gama Saúde',\n    life_empresarial_saude: 'Life Empresarial Saúde',\n    mediservice: 'MediService',\n    medsenior: 'MedSenior',\n    medtour: 'MedTour',\n    metrus: 'Metrus',\n    notredame_intermedica: 'Notredame Intermédica',\n    omint_saude: 'Omint Saúde',\n    porto_saude: 'Porto Saúde',\n    postal_saude: 'Postal Saúde',\n    prevent_senior: 'Prevent Senior',\n    proasa_adventista_de_saude: 'PROASA Adventista de Saúde',\n    sami_saude: 'Sami Saúde',\n    santa_casa_saude: 'Santa Casa Saúde',\n    saude_caixa: 'Saúde Caixa',\n    sbc_saude: 'SBC Saúde',\n    sepaco: 'Sepaco',\n    sulamerica: 'SulAmérica',\n    total_medcare: 'Total MedCare',\n    trasmontano: 'Trasmontano',\n    vivest: 'Vivest',\n    particular: 'Particular',\n    nao_possui: 'Não possui',\n  },\n  estagio_funil: {\n    em_atendimento: 'Atendendo',\n    convenio_nao_legivel: 'Negociando',\n    convenio_legivel: 'Negociando',\n    em_avaliacao_hsm: 'Negociando',\n    vaga_cedida: 'Rastreio',\n    internado: 'Internação',\n    vaga_recusada_medico: 'Perdido',\n    recusou_origem: 'Perdido',\n    recusou_internacao: 'Perdido',\n    sem_condicoes_financeiras: 'Perdido',\n  },\n  status: {\n    em_triagem: 'Em triagem',\n    qualificado: 'Qualificado',\n    desqualificado: 'Desqualificado',\n    internado: 'Internado',\n  },\n  motivo_desqualificacao: {\n    lgpd_recusada: 'LGPD recusada',\n    fora_do_escopo: 'Fora do escopo',\n    plano_nao_aceito: 'Plano não aceito',\n    desistiu: 'Desistiu',\n  },\n  motivo_perda: {\n    alta_origem: 'Alta Origem',\n    cancelado_pela_origem: 'Cancelado pela Origem',\n    card_duplicado: 'Card Duplicado',\n    convenio_por_direcionamento: 'Convênio por Direcionamento',\n    convenio_sem_contrato_para_adulto: 'Convênio sem Contrato para Adulto',\n    convenio_sem_contrato_para_kids: 'Convênio sem Contrato para Kids',\n    convenio_suspenso: 'Convênio Suspenso',\n    consulta_psiquiatrica: 'Consulta Psiquiátrica',\n    demora_no_atendimento: 'Demora no Atendimento',\n    falta_de_interacao: 'Falta de Interação',\n    familia_desistiu_da_internacao: 'Família Desistiu da Internação',\n    familia_rejeitou_vaga: 'Família Rejeitou Vaga',\n    financeiro_itens_de_higiene: 'Financeiro - Itens de Higiene',\n    financeiro_lavanderia: 'Financeiro - Lavanderia',\n    financeiro_lavanderia_e_itens_de_higiene: 'Financeiro - Lavanderia e Itens de Higiene',\n    localizacao: 'Localização',\n    medico_hsm_vaga_negada: 'Médico HSM - Vaga Negada',\n    nao_gostou_do_hospital: 'Não Gostou do Hospital',\n    paciente_evadiu_na_origem: 'Paciente Evadiu na Origem',\n    pendencias_administrativas: 'Pendências Administrativas',\n    plano_de_saude_nao_atendido_pelo_hsm: 'Plano de Saúde Não Atendido pelo HSM',\n    plano_de_saude_nao_autorizou: 'Plano de Saúde Não Autorizou',\n    plano_em_carencia: 'Plano em Carência',\n    plano_nao_elegivel: 'Plano Não Elegível',\n    recusa_de_internacao_na_avaliacao: 'Recusa de Internação na Avaliação',\n    sem_acompanhante_kids: 'Sem Acompanhante Kids',\n    sem_condicoes_financeiras: 'Sem Condições Financeiras',\n    sem_indicacao_medica_para_internacao: 'Sem Indicação Médica para Internação',\n    sem_leito_disponivel: 'Sem Leito Disponível',\n    transferido_para_outro_servico: 'Transferido para Outro Serviço',\n    // slugs antigos (antes de ago/2026)\n    parou_de_interagir: 'Falta de Interação',\n    desistiu_do_tratamento: 'Família Desistiu da Internação',\n    financeiro: 'Sem Condições Financeiras',\n    plano_de_saude_sem_convenio: 'Plano de Saúde Não Atendido pelo HSM',\n  },\n};\n\nfunction toLabel(field, value) {\n  if (value === null || value === undefined || value === '') return null;\n  const map = LABELS[field];\n  if (!map) return value;\n  // Se o valor nao estiver no mapa, NAO manda o slug cru pro Chatwoot (o campo e uma\n  // lista fechada e valor invalido suja o registro). Melhor vazio.\n  return map[value] !== undefined ? map[value] : '';\n}\n\nconst output = [];\n\nfor (const item of $input.all()) {\n  const d = item.json;\n\n  output.push({\n    json: {\n      // Identificadores\n      conversation_id: d.conversation_id,\n      contact_name: d.contact_name,\n      data_nascimento: d.data_nascimento,\n      email: d.email,\n      phone: d.phone,\n\n      // Campos traduzidos para o Chatwoot\n      assunto_label: toLabel('assunto', d.assunto),\n      para_quem_label: toLabel('para_quem', d.para_quem),\n      tipo_contato_label: toLabel('tipo_contato', d.tipo_contato),\n      motivo_contato_label: toLabel('motivo_contato', d.motivo_contato),\n      forma_internacao_label: toLabel('forma_internacao', d.forma_internacao),\n      plano_saude_label: toLabel('plano_saude', d.plano_saude),\n      estagio_funil_label: toLabel('estagio_funil', d.estagio_funil),\n      status_label: toLabel('status', d.status),\n      motivo_desqualificacao_label: toLabel('motivo_desqualificacao', d.motivo_desqualificacao),\n      motivo_perda_label: toLabel('motivo_perda', d.motivo_perda),\n\n      // Booleans e demais\n      ex_paciente: d.ex_paciente,\n      carteirinha_enviada: d.carteirinha_enviada,\n      carteirinha_url: d.carteirinha_url,\n      observacoes: d.observacoes,\n      elegivel: d.elegivel,\n      transbordado: d.transbordado,\n      tags: d.tags,\n    },\n  });\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13984,
+        4144
+      ],
+      "id": "9c125e6b-5643-4498-9b06-87b9f5772dbb",
+      "name": "Snake to Label2"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hsm-agente-humano",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        13536,
+        4144
+      ],
+      "id": "efd4e451-2e54-4101-9b64-97f4c629df76",
+      "name": "Webhook8",
+      "webhookId": "addad1ff-115c-40b1-b8b1-bb7f95bc3897"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        15728,
+        4464
+      ],
+      "id": "6b87d0bc-8ebe-490b-901e-37e2c5a2664a",
+      "name": "No Operation, do nothing25"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "text": "Você é um extrator de dados de carteirinhas de plano de saúde. A pessoa pode enviar a FRENTE, o VERSO, ou as duas faces na mesma foto. Leia a imagem e devolva TODOS os dados legíveis, no formato fixo abaixo.\n\nREGRAS:\n1. Retorne EXATAMENTE no formato abaixo, sem nada antes ou depois. Sem markdown, sem emojis, sem explicações.\n2. Campo não visível ou ilegível: escreva \"não identificado\". NUNCA invente.\n3. Copie números exatamente como aparecem (com hífens, pontos, espaços e dígitos verificadores).\n4. Plano: nome COMPLETO como aparece (ex.: \"AMIL BLUE II NACIONAL\", \"BRADESCO SAÚDE TOP NACIONAL\").\n5. Lado: \"frente\" (nome/número do beneficiário em destaque), \"verso\" (telefones, instruções, ANS, regras), \"frente e verso\" (as duas faces na imagem), \"print do portal/app\" (captura de tela de aplicativo ou portal da operadora/credenciado mostrando dados do beneficiário, ex.: tela de elegibilidade, carteirinha digital) ou \"não é carteirinha\".\n   Print de portal/app VALE como carteirinha: extraia os dados normalmente. Foto torta, girada 90° ou de tela trincada também vale: leia o que for legível.\n6. Outros dados: liste qualquer outra informação útil que aparecer (empresa contratante, código da operadora, CPF, carência, segmentação, telefones da operadora etc.), separados por \" | \". Se não houver, \"nenhum\".\n\nFORMATO OBRIGATÓRIO (preserve as quebras de linha):\nLado: [frente | verso | frente e verso | print do portal/app | não é carteirinha]\nOperadora: [nome da operadora]\nPlano: [nome do plano]\nTitular/beneficiário: [nome completo]\nNúmero da carteirinha: [número]\nValidade: [data]\nData de nascimento: [data]\nCNS: [número do Cartão Nacional de Saúde]\nAcomodação: [enfermaria | apartamento | ...]\nAbrangência: [nacional | estadual | grupo de municípios | ...]\nRegistro ANS: [número]\nOutros dados: [...]\n\nSe a imagem NÃO for uma carteirinha de plano de saúde, retorne \"Lado: não é carteirinha\" e todos os demais campos como \"não identificado\".",
+        "inputType": "base64",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        14928,
+        3488
+      ],
+      "id": "e708df0d-d301-473f-9dcc-26bd76b437a5",
+      "name": "Analyze image2",
+      "credentials": {
+        "openAiApi": {
+          "id": "EYilgBA09xHpNwp0",
+          "name": "OpenAI HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Edit Fields8').item.json.file_type }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c547b65d-4f4c-4333-a641-8d16ab7f7bf6"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "61ae4e64-5eee-4969-9fe1-ecb03b5b743e",
+                    "leftValue": "={{ $('Edit Fields8').item.json.file_type }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notExists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "5b7994ee-a7bd-4d0b-b1f1-49f1e0aa9c65",
+                    "leftValue": "={{ $('Edit Fields8').item.json.file_type }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "image"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        14432,
+        3328
+      ],
+      "id": "d5a85386-7fce-4573-b967-255316fd08bd",
+      "name": "Switch10"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.data_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14688,
+        3488
+      ],
+      "id": "abfe75af-d5c2-4486-b6b1-553969c060a0",
+      "name": "HTTP Request7",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JLoMl2o4ImIJT28k",
+          "name": "Chatwoot bot Moniquinha"
+        }
+      },
+      "notes": "Baixa o anexo (carteirinha) do Chatwoot — precisa do Header Auth admin."
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        15200,
+        3328
+      ],
+      "id": "85d9fb06-bba0-4939-9da1-ced05186f38d",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hsm-chatwoot",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        13536,
+        4560
+      ],
+      "id": "3a62a76b-dcef-4245-b9e1-3a8263126b9a",
+      "name": "Webhook9",
+      "webhookId": "addad1ff-115c-40b1-b8b1-bb7f95bc3897"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "87467f3a-8b0a-4d7a-8214-7416a86b025b",
+              "name": "id",
+              "value": "={{ $json.body.id }}",
+              "type": "number"
+            },
+            {
+              "id": "0a1702c3-f001-492e-81be-cb7052829b02",
+              "name": "name",
+              "value": "={{ $json.body.meta.sender.name }}",
+              "type": "string"
+            },
+            {
+              "id": "72592945-b0d2-4104-a5da-9231552ef256",
+              "name": "status",
+              "value": "={{ $json.body.status }}",
+              "type": "string"
+            },
+            {
+              "id": "b1cfc159-f58a-4ef2-b5fb-bdb8dba4f912",
+              "name": "attrs_conversa",
+              "value": "={{ $json.body.custom_attributes || {} }}",
+              "type": "object"
+            },
+            {
+              "id": "03dc1ec3-976b-4b43-a32e-dfc99fa6f2ab",
+              "name": "venda",
+              "value": "={{ $json.body.custom_attributes ? ($json.body.custom_attributes.venda || \"\") : \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "ce8039f3-a00e-4013-be90-848a0812b103",
+              "name": "motivo_de_perda",
+              "value": "={{ $json.body.custom_attributes ? ($json.body.custom_attributes.motivo_de_perda || \"\") : \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        13760,
+        4560
+      ],
+      "id": "2521d3a5-4414-4bf9-8fe6-981fa169bb10",
+      "name": "Edit Fields10"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "triagem_hsm",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "conversation_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "transbordado",
+              "fieldValue": "false"
+            },
+            {
+              "fieldId": "triagem_concluida",
+              "fieldValue": "false"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        14208,
+        4448
+      ],
+      "id": "9c8e6562-ef9e-47b5-9004-45c74094c85d",
+      "name": "Update a row2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nIMZOy6MhyvP9bU0",
+          "name": "Supabase HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "45d729a9-8806-42ae-9b3f-60444fd095b8",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "resolved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        13984,
+        4560
+      ],
+      "id": "e1905922-5006-4b63-af74-eb88a7da101b",
+      "name": "If17"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        14208,
+        4672
+      ],
+      "id": "6bf4df0b-59e1-4ddd-88ed-1928c69c0ab7",
+      "name": "No Operation, do nothing27"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        14432,
+        4448
+      ],
+      "id": "ba1b7aac-2eaf-4504-b597-e7be743b8cd9",
+      "name": "No Operation, do nothing28"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-6-luna",
+          "mode": "list",
+          "cachedResultName": "gpt-6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        15312,
+        3488
+      ],
+      "id": "1e2e8cf4-97b6-45e9-b3fd-6461f1d6fa77",
+      "name": "OpenAI Chat Model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "EYilgBA09xHpNwp0",
+          "name": "OpenAI HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Base de conhecimento oficial do Hospital Santa Monica. Consulte SEMPRE que o contato perguntar sobre: horarios e regras de visita, enxoval permitido, itens proibidos, localizacao e endereco, como funciona a entrada/avaliacao do paciente, tipos de internacao (incl. involuntaria), rotina de ligacoes apos a internacao, agendamento de consulta com o psiquiatra, coparticipacao, solicitacao de prontuario, remocao, ou dados institucionais do hospital. Passe a pergunta do contato como query. Nunca invente informacao institucional que nao venha desta tool ou do ANEXO A.",
+        "tableName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "documents",
+          "cachedResultName": "documents"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        15296,
+        3616
+      ],
+      "id": "121fdf6f-8c99-4296-afa1-87e686c9b32c",
+      "name": "base_conhecimento_hsm2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nIMZOy6MhyvP9bU0",
+          "name": "Supabase HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        15184,
+        3840
+      ],
+      "id": "ec11c4e6-4945-4e68-a0c2-5069575f6110",
+      "name": "Embeddings OpenAI2",
+      "credentials": {
+        "openAiApi": {
+          "id": "EYilgBA09xHpNwp0",
+          "name": "OpenAI HSM"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0bf4232c-f77d-42cc-a8d9-3fc225d731f0",
+              "leftValue": "={{ $json.sender_type }}",
+              "rightValue": "agent_bot",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "8d7e842a-bc8e-4b4e-a5c4-e75da7dbc886",
+              "leftValue": "={{ $json.privado }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        13792,
+        3504
+      ],
+      "id": "a27fbdd6-a1b4-4302-b3b3-93409fe5a800",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields8').item.json.conversation_id }}/custom_attributes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ custom_attributes: Object.assign({}, $json.custom_attributes || {}, { bot_pausado: true }) }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14032,
+        3616
+      ],
+      "id": "8b8f3b64-ffea-4da5-b22c-313176fece98",
+      "name": "Pausar bot1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d283e164-f604-4151-b8d8-e158486cc889",
+              "leftValue": "={{ $json.bot_pausado }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        14016,
+        3360
+      ],
+      "id": "95f25b53-d35b-49fb-bffa-192fac8e74fa",
+      "name": "Bot pausado?1"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "triagem_hsm",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "conversation_id",
+              "keyValue": "={{ $('Edit Fields8').item.json.conversation_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        11840,
+        2544
+      ],
+      "id": "6f02d2a8-fd79-4ef2-ba50-517053d49191",
+      "name": "Buscar triagem (pos-resposta)",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nIMZOy6MhyvP9bU0",
+          "name": "Supabase HSM"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "trifim-0001-0001-0001-000000000003",
+              "leftValue": "={{ $json.transbordado === true || $json.triagem_concluida === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        12064,
+        2544
+      ],
+      "id": "576d7b1d-b8f2-4244-84a0-143a5dbb3dfe",
+      "name": "Triagem finalizada?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "pz-0001-0001-0001-000000000001",
+              "leftValue": "={{ ( ($('Edit Fields9').item.json.transbordado === true || $('Edit Fields9').item.json.transbordado === 'true') && !($('Edit Fields9').item.json.transbordado_antes === true || $('Edit Fields9').item.json.transbordado_antes === 'true') ) || ( ($('Edit Fields9').item.json.triagem_concluida === true || $('Edit Fields9').item.json.triagem_concluida === 'true') && !($('Edit Fields9').item.json.concluida_antes === true || $('Edit Fields9').item.json.concluida_antes === 'true') ) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        14880,
+        4272
+      ],
+      "id": "172d68ab-a250-45ec-8357-e55402e7844e",
+      "name": "Triagem ACABOU agora? (transicao)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields9').item.json.conversation_id }}/custom_attributes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ custom_attributes: Object.assign({}, $('Chatwoot: Get Conversation2').item.json.custom_attributes || {}, { bot_pausado: true, assunto_da_conversa: $('Snake to Label2').item.json.assunto_label || '', motivo_de_perda: $('Snake to Label2').item.json.motivo_perda_label || '', elegivel: ($('Snake to Label2').item.json.elegivel === true ? 'Sim' : ($('Snake to Label2').item.json.elegivel === false ? 'Não' : '')) }) }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        15104,
+        4272
+      ],
+      "id": "261f4619-374d-425a-a83f-65748a778d86",
+      "name": "Pausar bot (pos-triagem)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields9').item.json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "=📝 Resumo da triagem (Mônica)\\nContato: {{ $('Edit Fields9').item.json.nome_contato }}\\nPaciente: {{ $('Snake to Label2').item.json.contact_name }}\\nNascimento: {{ $('Edit Fields9').item.json.data_nascimento }}\\nAssunto: {{ $('Snake to Label2').item.json.assunto_label }}\\nPara quem: {{ $('Snake to Label2').item.json.para_quem_label }}\\nTipo de contato: {{ $('Snake to Label2').item.json.tipo_contato_label }}\\nForma: {{ $('Snake to Label2').item.json.forma_internacao_label }}\\nPlano: {{ $('Snake to Label2').item.json.plano_saude_label }}\\nCPF: {{ $('Edit Fields9').item.json.cpf }}\\n\\nObservações: {{ $('Snake to Label2').item.json.observacoes }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        15104,
+        4464
+      ],
+      "id": "3d87247d-ccca-4791-a4fe-18edb8b7a8ef",
+      "name": "Nota: resumo da triagem",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "19cb96b8-bbb6-4179-aa5d-ceed00995b57",
+              "leftValue": "={{ $('Edit Fields10').item.json.venda === 'Sim' || String($('Edit Fields10').item.json.motivo_de_perda || '').trim().length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        14432,
+        4448
+      ],
+      "id": "e8331ce2-7fa2-4bde-9c11-32a0efdb88f0",
+      "name": "Encerrou com desfecho?",
+      "notes": "Só reativa o bot quando a conversa foi encerrada COM venda ou motivo. Sem desfecho o Pulso reabre a conversa (regra 12) e o atendente continua."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields10').item.json.id }}/custom_attributes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ custom_attributes: Object.assign({}, $('Edit Fields10').item.json.attrs_conversa || {}, { bot_pausado: false }) }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14656,
+        4448
+      ],
+      "id": "10139476-562a-4449-90cc-dada26c7b88f",
+      "name": "Reativar bot (novo ciclo)",
+      "notesInFlow": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "Limpa bot_pausado: quando o paciente escrever de novo, a Mônica atende o novo ciclo."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields8').item.json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "=🪪 Carteirinha recebida (Mônica)\\n{{ ($json['0'] && $json['0'].content && $json['0'].content[0] ? $json['0'].content[0].text : ($json.content || $json.text || '')) }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        15136,
+        3632
+      ],
+      "id": "7241d554-51fd-43f1-8d42-4636308a4bc7",
+      "name": "Nota: dados da carteirinha",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields8').item.json.conversation_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        13812,
+        3756
+      ],
+      "id": "ade7efbb-bebe-418c-8237-303b32bc4ab8",
+      "name": "Ler atributos (antes de pausar)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "buscar_paciente_por_cpf2": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent6",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent6": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields8": {
+      "main": [
+        [
+          {
+            "node": "Switch2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch2": {
+      "main": [
+        [
+          {
+            "node": "Bot pausado?1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook3": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request6": {
+      "main": [
+        [
+          {
+            "node": "Wait4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversa existe2": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent6",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "If14",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If14": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items2": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing23",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait4": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory2": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent6",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "salvar_triagem2": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent6",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chatwoot: Get Conversation2": {
+      "main": [
+        [
+          {
+            "node": "Triagem ACABOU agora? (transicao)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields9": {
+      "main": [
+        [
+          {
+            "node": "Snake to Label2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Snake to Label2": {
+      "main": [
+        [
+          {
+            "node": "Chatwoot: Get Conversation2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook8": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze image2": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 2
+          },
+          {
+            "node": "Nota: dados da carteirinha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch10": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request7": {
+      "main": [
+        [
+          {
+            "node": "Analyze image2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "AI Agent6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook9": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields10": {
+      "main": [
+        [
+          {
+            "node": "If17",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row2": {
+      "main": [
+        [
+          {
+            "node": "Encerrou com desfecho?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If17": {
+      "main": [
+        [
+          {
+            "node": "Update a row2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing27",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "base_conhecimento_hsm2": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent6",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI2": {
+      "ai_embedding": [
+        [
+          {
+            "node": "base_conhecimento_hsm2",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing22",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ler atributos (antes de pausar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bot pausado?1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Switch10",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Criar contato (1o contato)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Operation, do nothing23": {
+      "main": [
+        [
+          {
+            "node": "Buscar triagem (pos-resposta)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar triagem (pos-resposta)": {
+      "main": [
+        [
+          {
+            "node": "Triagem finalizada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Triagem finalizada?": {
+      "main": [
+        [
+          {
+            "node": "Ler atributos (antes de pausar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pausar bot (pos-triagem)": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing25",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nota: resumo da triagem": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing25",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Triagem ACABOU agora? (transicao)": {
+      "main": [
+        [
+          {
+            "node": "Pausar bot (pos-triagem)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Nota: resumo da triagem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing25",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encerrou com desfecho?": {
+      "main": [
+        [
+          {
+            "node": "Reativar bot (novo ciclo)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing28",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reativar bot (novo ciclo)": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing28",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent6",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler atributos (antes de pausar)": {
+      "main": [
+        [
+          {
+            "node": "Pausar bot1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  }
+}

@@ -6,6 +6,7 @@ import { assuntosIsentosDesfecho, botAtivo, botNome, exigirDesfecho, n8nAtivo } 
 import { ETAPA_TO_ESTAGIO, etapaFromEstagio } from '@/lib/funil-etapas'
 import {
   getContactConversations,
+  getConversation,
   postPrivateNote,
   toggleConversationStatus,
   updateContactCustomAttributes,
@@ -160,6 +161,33 @@ async function aplicarAtributos(
   return mudou
 }
 
+function mesmoConjunto(a: unknown, b: unknown): boolean {
+  const A = Array.isArray(a) ? a : []
+  const B = Array.isArray(b) ? b : []
+  return A.length === B.length && A.every((x) => B.includes(x))
+}
+
+/**
+ * As labels do payload são um retrato do momento em que o Chatwoot gerou o evento.
+ * Numa rajada (transbordo: pausa + nota + atributos chegam juntos), eventos atrasados
+ * trazem as labels de ANTES — gravá-los fazia o CRM tirar e repor a label várias vezes
+ * ("Arthur adicionou / removeu urgente"). Se o payload diverge do banco, relê do Chatwoot.
+ * `null` = não deu para confirmar; melhor não mexer nas tags.
+ */
+async function labelsConfiaveis(
+  convId: string,
+  doEvento: string[],
+  noBanco: unknown
+): Promise<string[] | null> {
+  if (mesmoConjunto(doEvento, noBanco)) return doEvento
+  try {
+    return (await getConversation(convId)).labels ?? []
+  } catch (e) {
+    console.warn('[webhook conversation] reler labels falhou:', (e as Error).message)
+    return null
+  }
+}
+
 // ------------------------------------------------------------
 // conversation_created / conversation_updated
 // ------------------------------------------------------------
@@ -181,7 +209,10 @@ export async function onConversation(body: AnyObj): Promise<AnyObj> {
   }
 
   const extra: AnyObj = {}
-  if (Array.isArray(body.labels)) extra.tags = body.labels
+  if (Array.isArray(body.labels)) {
+    const labels = await labelsConfiaveis(convId, body.labels as string[], row.tags)
+    if (labels) extra.tags = labels
+  }
   if (typeof body.status === 'string' && body.status) extra.chatwoot_status = body.status
   if (!row.chatwoot_contact_id && sender.id) extra.chatwoot_contact_id = Number(sender.id)
   const atendente = await atendenteIdPorAgente(admin, body.meta?.assignee?.id)
