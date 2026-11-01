@@ -1740,6 +1740,77 @@
           "name": "Chatwoot sistema (token Arthur — trocar)"
         }
       }
+    },
+    {
+      "id": "10e1d83e-893e-46b7-8d56-815812eb1b05",
+      "name": "Transferiu para humano?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        15104,
+        4664
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bd390171-d9c5-40ce-be65-0e4217fabca6",
+              "leftValue": "={{ $('Edit Fields9').item.json.transbordado === true || $('Edit Fields9').item.json.transbordado === 'true' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Só transferência para humano vai para o time. Encerramento sem atendente (plano não aceito, LGPD) não."
+    },
+    {
+      "id": "211e7d79-fbd8-4a49-9da2-e4e4bc2957cf",
+      "name": "Atribuir time comercial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        15364,
+        4664
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields9').item.json.conversation_id }}/assignments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"team_id\": 5}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      },
+      "notes": "Time comercial (id 5, auto-atribuição ligada): o Chatwoot distribui entre as atendentes online do time."
     }
   ],
   "connections": {
@@ -2183,6 +2254,11 @@
             "node": "Nota: resumo da triagem",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Transferiu para humano?",
+            "type": "main",
+            "index": 0
           }
         ],
         [
@@ -2239,6 +2315,29 @@
         [
           {
             "node": "Pausar bot1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transferiu para humano?": {
+      "main": [
+        [
+          {
+            "node": "Atribuir time comercial",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Atribuir time comercial": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing25",
             "type": "main",
             "index": 0
           }
