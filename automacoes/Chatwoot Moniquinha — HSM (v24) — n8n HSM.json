@@ -1774,11 +1774,11 @@
         },
         "options": {}
       },
-      "notes": "Só transferência para humano vai para o time. Encerramento sem atendente (plano não aceito, LGPD) não."
+      "notes": "Só transferência para humano é distribuída. Encerramento sem atendente (plano não aceito, LGPD) não."
     },
     {
-      "id": "211e7d79-fbd8-4a49-9da2-e4e4bc2957cf",
-      "name": "Atribuir time comercial",
+      "id": "5af2f5bd-e87c-483c-adca-0d1e98891cb1",
+      "name": "Atendentes da caixa",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
@@ -1786,10 +1786,46 @@
         4664
       ],
       "parameters": {
-        "method": "POST",
-        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields9').item.json.conversation_id }}/assignments",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
+        "url": "https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/inbox_members/6",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      },
+      "notes": "Membros da caixa WABA - Principal (id 6)."
+    },
+    {
+      "id": "ede6cca5-8011-4b53-bc16-e2d389258833",
+      "name": "Elegíveis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        15604,
+        4664
+      ],
+      "parameters": {
+        "jsCode": "// Só agentes (administradores ficam de fora) da caixa do WhatsApp.\nconst membros = ($json.payload || []).filter((m) => m.role === 'agent')\nreturn membros.map((m) => ({ json: { id: m.id, name: m.name, online: m.availability_status === 'online' } }))"
+      }
+    },
+    {
+      "id": "d4d64f41-adf5-47b8-ba23-0db7b4c4246e",
+      "name": "Abertas por atendente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        15844,
+        4664
+      ],
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "url": "https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/filter?page=1",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -1801,7 +1837,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{\"team_id\": 5}",
+        "jsonBody": "={{ JSON.stringify({ payload: [ { attribute_key: 'assignee_id', filter_operator: 'equal_to', values: [$json.id], query_operator: 'and' }, { attribute_key: 'status', filter_operator: 'equal_to', values: ['open'], query_operator: null } ] }) }}",
         "options": {}
       },
       "credentials": {
@@ -1810,7 +1846,55 @@
           "name": "Chatwoot sistema (token Arthur — trocar)"
         }
       },
-      "notes": "Time comercial (id 5, auto-atribuição ligada): o Chatwoot distribui entre as atendentes online do time."
+      "notes": "Uma chamada por atendente; meta.all_count = conversas abertas atribuídas a ela."
+    },
+    {
+      "id": "578d2664-5d63-403f-bfe3-e69e745cb2a7",
+      "name": "Escolher atendente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16084,
+        4664
+      ],
+      "parameters": {
+        "jsCode": "// Distribuição: entre os AGENTES da caixa do WhatsApp, prioriza quem está online\n// (ninguém online → todas) e escolhe quem tem MENOS conversas abertas atribuídas.\n// Empate → revezamento pelo número da conversa.\nconst agentes = $('Elegíveis').all().map((i) => i.json)\nif (!agentes.length) return []\nconst respostas = $input.all().map((i) => i.json)\nconst lista = agentes.map((a, k) => ({ ...a, abertas: (respostas[k] && respostas[k].meta && respostas[k].meta.all_count) || 0 }))\nconst online = lista.filter((a) => a.online)\nconst pool = online.length ? online : lista\nconst menor = Math.min(...pool.map((a) => a.abertas))\nconst empatados = pool.filter((a) => a.abertas === menor).sort((a, b) => a.id - b.id)\nconst conv = Number($('Edit Fields9').first().json.conversation_id) || 0\nconst escolhida = empatados[conv % empatados.length]\nreturn [{ json: {\n  assignee_id: escolhida.id,\n  nome: escolhida.name,\n  abertas: escolhida.abertas,\n  motivo: (online.length ? 'online' : 'ninguém online') + ', ' + menor + ' conversa(s) aberta(s)',\n  placar: lista.map((a) => a.name + ': ' + a.abertas + (a.online ? ' (online)' : ' (offline)')).join(' | '),\n} }]"
+      }
+    },
+    {
+      "id": "588b6118-5a6c-4355-ae22-5f03d311e572",
+      "name": "Atribuir atendente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        16324,
+        4664
+      ],
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "url": "=https://chat.hospitalsantamonica.com.br/api/v1/accounts/1/conversations/{{ $('Edit Fields9').first().json.conversation_id }}/assignments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ assignee_id: $json.assignee_id }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FnzUVRiZSdnzZrpb",
+          "name": "Chatwoot sistema (token Arthur — trocar)"
+        }
+      }
     }
   ],
   "connections": {
@@ -2325,7 +2409,7 @@
       "main": [
         [
           {
-            "node": "Atribuir time comercial",
+            "node": "Atendentes da caixa",
             "type": "main",
             "index": 0
           }
@@ -2333,7 +2417,51 @@
         []
       ]
     },
-    "Atribuir time comercial": {
+    "Atendentes da caixa": {
+      "main": [
+        [
+          {
+            "node": "Elegíveis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Elegíveis": {
+      "main": [
+        [
+          {
+            "node": "Abertas por atendente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Abertas por atendente": {
+      "main": [
+        [
+          {
+            "node": "Escolher atendente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escolher atendente": {
+      "main": [
+        [
+          {
+            "node": "Atribuir atendente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atribuir atendente": {
       "main": [
         [
           {
