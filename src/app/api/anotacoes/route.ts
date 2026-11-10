@@ -10,6 +10,8 @@ import { anotacaoCreateSchema, zodMensagem } from '@/lib/validation'
 // atendentes em anotações de triagem — por isso a rota autentica a sessão e opera via
 // service role.
 
+const SELECT_ANEXOS =
+  'id, triagem_id, usuario_id, conteudo, created_at, origem, autor_nome, chatwoot_message_id, anexos, usuarios(nome)'
 const SELECT = 'id, triagem_id, usuario_id, conteudo, created_at, origem, autor_nome, chatwoot_message_id, usuarios(nome)'
 const SELECT_LEGADO = 'id, triagem_id, usuario_id, conteudo, created_at, usuarios(nome)'
 
@@ -29,6 +31,12 @@ export async function GET(request: NextRequest) {
   let data: unknown[] | null = null
   let dbErr: { message: string } | null = null
   {
+    const r = await consulta(SELECT_ANEXOS)
+    data = r.data as unknown[] | null
+    dbErr = r.error
+  }
+  // Migration 20261110 (anexos) ainda não rodou → mesmas colunas, sem as imagens.
+  if (dbErr && /column|does not exist/i.test(dbErr.message)) {
     const r = await consulta(SELECT)
     data = r.data as unknown[] | null
     dbErr = r.error

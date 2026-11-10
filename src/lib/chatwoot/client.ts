@@ -103,7 +103,15 @@ export interface ChatwootMessage {
   private?: boolean
   created_at?: number
   sender?: ChatwootSender | null
-  attachments?: Array<{ file_type?: string; data_url?: string }>
+  attachments?: Array<{
+    id?: number
+    file_type?: string
+    data_url?: string
+    thumb_url?: string
+    file_size?: number
+    width?: number | null
+    height?: number | null
+  }>
 }
 
 export async function getConversation(conversationId: string | number): Promise<ChatwootConversation> {
@@ -231,6 +239,38 @@ export async function postPrivateNote(
 ): Promise<number | null> {
   const m = await sendMessage(conversationId, content, { private: true })
   return m?.id ?? null
+}
+
+/**
+ * NOTA PRIVADA com um arquivo anexado (multipart). O arquivo fica no storage do Chatwoot.
+ * Sem nova tentativa automática: repetir um upload duplicaria a nota na conversa.
+ */
+export async function postPrivateNoteComAnexo(
+  conversationId: string | number,
+  content: string,
+  arquivo: { dados: Blob; nome: string }
+): Promise<ChatwootMessage> {
+  const { BASE, TOKEN, ACCOUNT } = cfg()
+  if (!BASE || !TOKEN) throw new Error('Chatwoot não configurado (BASE/TOKEN ausentes)')
+  const path = `/conversations/${conversationId}/messages`
+  const form = new FormData()
+  form.set('content', content)
+  form.set('message_type', 'outgoing')
+  form.set('private', 'true')
+  form.append('attachments[]', arquivo.dados, arquivo.nome)
+  // Sem Content-Type: o fetch monta o multipart com o boundary.
+  const res = await fetch(`${BASE}/api/v1/accounts/${ACCOUNT}${path}`, {
+    method: 'POST',
+    headers: { api_access_token: TOKEN },
+    body: form,
+    cache: 'no-store',
+    signal: AbortSignal.timeout(60_000),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new ChatwootError(`Chatwoot POST ${path} (anexo) -> ${res.status} ${body.slice(0, 200)}`, res.status, path)
+  }
+  return (await res.json()) as ChatwootMessage
 }
 
 // ============================================================

@@ -8,6 +8,7 @@ import {
   getContact,
   getConversation,
   postPrivateNote,
+  postPrivateNoteComAnexo,
   searchContacts,
   setConversationLabels,
   telefoneE164,
@@ -15,6 +16,7 @@ import {
   updateConversationCustomAttributes,
   type ChatwootConversation,
 } from './client'
+import { anexosDeImagem, NOTA_SEM_LEGENDA, type AnexoNota } from '@/lib/anexos'
 import { listarCampos } from './campos'
 import { KEYS } from './attributes'
 import {
@@ -227,6 +229,21 @@ export async function espelharNotaNoChatwoot(
     console.error('[nota->chatwoot]', (e as Error).message)
     return null
   }
+}
+
+/**
+ * Imagem anexada no card → nota privada com anexo na conversa. Diferente da nota de
+ * texto, aqui a falha SOBE: sem o Chatwoot não existe onde guardar o arquivo.
+ */
+export async function espelharImagemNoChatwoot(
+  conversationId: string | number,
+  autor: string,
+  legenda: string,
+  arquivo: { dados: Blob; nome: string }
+): Promise<{ messageId: number | null; anexos: AnexoNota[] }> {
+  const texto = `📝 ${autor} ${MARCADOR_NOTA_CRM} ${legenda || NOTA_SEM_LEGENDA}`
+  const m = await postPrivateNoteComAnexo(conversationId, texto, arquivo)
+  return { messageId: m?.id ?? null, anexos: anexosDeImagem(m?.attachments) }
 }
 
 /** Atributos atuais do contato (para leads sem conversa). */

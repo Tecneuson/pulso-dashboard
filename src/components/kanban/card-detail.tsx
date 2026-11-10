@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Check,
   AlertCircle,
@@ -9,10 +10,12 @@ import {
   ChevronDown,
   ExternalLink,
   IdCard,
+  ImagePlus,
   Loader2,
   Phone,
   Search,
   Unlink,
+  X,
 } from 'lucide-react'
 import type {
   Agendamento,
@@ -26,6 +29,7 @@ import { MOTIVO_PERDA_LABELS } from '@/types'
 import { formatarCpf } from '@/lib/cpf'
 import { idadeEm, isKids } from '@/lib/idade'
 import { chatwootLinkDoLead } from '@/lib/chatwoot/urls'
+import { ANEXO_ACCEPT, ANEXO_MAX_BYTES, ANEXO_TIPOS, NOTA_SEM_LEGENDA, tamanhoLegivel, type AnexoNota } from '@/lib/anexos'
 import { useCampos } from '@/lib/api-store'
 import { CamposDinamicos } from './campos-dinamicos'
 import { Modal } from '@/components/ui/modal'
@@ -95,6 +99,7 @@ type Evento = {
   tipo: 'ganho' | 'perda' | 'anotacao'
   desfecho: string
   nota?: string
+  anexos?: AnexoNota[]
 }
 
 function withEmpty(opts?: { value: string; label: string }[]) {
@@ -133,7 +138,7 @@ function ContatoPaciente({ paciente: p }: { paciente: PacienteResumo }) {
   )
 }
 
-function EventRow({ ev }: { ev: Evento }) {
+function EventRow({ ev, onAbrir }: { ev: Evento; onAbrir?: (anexo: AnexoNota, ev: Evento) => void }) {
   const dot =
     ev.tipo === 'ganho' ? 'bg-success-500' : ev.tipo === 'anotacao' ? 'bg-brand-500' : 'bg-danger-500'
   const text =
@@ -150,7 +155,32 @@ function EventRow({ ev }: { ev: Evento }) {
         <span className="text-sm text-content-tertiary truncate">{ev.agente}</span>
         <span className={`ml-auto text-sm font-medium text-right shrink-0 ${text}`}>{ev.desfecho}</span>
       </div>
-      {ev.nota && <p className="text-sm text-content-secondary mt-1.5 pl-[22px]">{ev.nota}</p>}
+      {ev.nota && <p className="text-sm text-content-secondary mt-1.5 pl-[22px] whitespace-pre-wrap break-words">{ev.nota}</p>}
+      {ev.anexos && ev.anexos.length > 0 && (
+        <div className="mt-2 pl-[22px] flex flex-wrap gap-2">
+          {ev.anexos.map((a, i) => (
+            <button
+              key={a.id ?? i}
+              type="button"
+              onClick={() => onAbrir?.(a, ev)}
+              title="Ampliar imagem"
+              className="block h-20 w-28 overflow-hidden rounded-md border border-border bg-surface-tertiary hover:border-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- arquivo servido pelo Chatwoot */}
+              <img
+                src={a.thumb_url || a.url}
+                alt={a.nome || 'Imagem anexada'}
+                loading="lazy"
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  const img = e.currentTarget
+                  if (img.src !== a.url) img.src = a.url
+                }}
+              />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -190,6 +220,13 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
     'none'
   )
   const [notaTexto, setNotaTexto] = useState('')
+  // Imagem da anotação: vai para o Chatwoot como nota privada com anexo.
+  const [notaArquivo, setNotaArquivo] = useState<File | null>(null)
+  const [notaPreview, setNotaPreview] = useState<string | null>(null)
+  const [arrastando, setArrastando] = useState(false)
+  const [avisoImagem, setAvisoImagem] = useState(false)
+  const [ampliada, setAmpliada] = useState<{ anexo: AnexoNota; ev: Evento } | null>(null)
+  const arquivoRef = useRef<HTMLInputElement>(null)
   const [motivoPerda, setMotivoPerda] = useState('')
   const [acaoLoading, setAcaoLoading] = useState(false)
   const [acaoErro, setAcaoErro] = useState<string | null>(null)
@@ -244,6 +281,9 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
     setShowMoreContatos(false)
     setPainel(autoInternar ? 'internacao' : autoPerda ? 'perda' : 'none')
     setNotaTexto('')
+    setNotaArquivo(null)
+    setAvisoImagem(false)
+    setAmpliada(null)
     setMotivoPerda('')
     setAcaoErro(null)
     setEditandoNome(false)
@@ -354,6 +394,35 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carga])
   const sujo = base !== null && foto !== base
+
+  // Prévia local da imagem escolhida (liberada ao trocar/remover).
+  useEffect(() => {
+    if (!notaArquivo) {
+      setNotaPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(notaArquivo)
+    setNotaPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [notaArquivo])
+
+  // Esc fecha a imagem ampliada antes de fechar o card (o Modal escuta no document).
+  useEffect(() => {
+    if (!ampliada) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      setAmpliada(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [ampliada])
+
+  useEffect(() => {
+    if (!avisoImagem) return
+    const t = setTimeout(() => setAvisoImagem(false), 6000)
+    return () => clearTimeout(t)
+  }, [avisoImagem])
 
   if (!triagem) return null
 
@@ -527,20 +596,47 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
     }
   }
 
+  function escolherImagem(file: File | null | undefined) {
+    if (!file) return
+    if (!(ANEXO_TIPOS as readonly string[]).includes(file.type)) {
+      setAcaoErro('Formato não aceito. Use JPG, PNG ou WEBP.')
+      return
+    }
+    if (file.size > ANEXO_MAX_BYTES) {
+      setAcaoErro(`Imagem acima de 10 MB (${tamanhoLegivel(file.size)}).`)
+      return
+    }
+    setAcaoErro(null)
+    setNotaArquivo(file)
+  }
+
   async function salvarAnotacao() {
-    if (!notaTexto.trim()) return
+    if (!notaTexto.trim() && !notaArquivo) return
     setAcaoLoading(true)
     setAcaoErro(null)
     try {
-      const res = await fetch('/api/anotacoes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ triagem_id: triagem!.id, conteudo: notaTexto.trim() }),
-      })
-      const data = await res.json()
+      let res: Response
+      if (notaArquivo) {
+        const form = new FormData()
+        form.set('triagem_id', triagem!.id)
+        form.set('conteudo', notaTexto.trim())
+        form.set('arquivo', notaArquivo)
+        res = await fetch('/api/anotacoes/anexo', { method: 'POST', body: form })
+      } else {
+        res = await fetch('/api/anotacoes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ triagem_id: triagem!.id, conteudo: notaTexto.trim() }),
+        })
+      }
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'erro')
+      // Sessão expirada devolve a página de login (200 sem JSON): não entra no histórico.
+      if (!data.anotacao) throw new Error('Não foi possível salvar. Recarregue a página e entre de novo.')
       setAnotacoes((prev) => [data.anotacao, ...prev])
+      if (notaArquivo) setAvisoImagem(true)
       setNotaTexto('')
+      setNotaArquivo(null)
       setPainel('none')
     } catch (e) {
       console.error('Falha ao salvar anotação:', e)
@@ -687,8 +783,11 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
     agente: a.autor_nome ?? a.usuarios?.nome ?? (a.origem === 'chatwoot' ? 'Chatwoot' : 'Equipe'),
     tipo: 'anotacao',
     desfecho: a.origem === 'chatwoot' ? 'Nota (Chatwoot)' : a.origem === 'bot' ? 'Resumo (Mônica)' : 'Anotação',
-    nota: a.conteudo,
+    nota: a.anexos?.length && a.conteudo === NOTA_SEM_LEGENDA ? undefined : a.conteudo,
+    anexos: a.anexos ?? undefined,
   }))
+  const totalImagens = anotacoes.reduce((n, a) => n + (a.anexos?.length ?? 0), 0)
+  const podeAnexar = !!triagem.conversation_id
 
   // Observações gravadas pelo bot na triagem (coluna `observacoes`) viram um evento do histórico.
   const eventosTriagemBot: Evento[] = triagem.observacoes
@@ -873,6 +972,17 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
                     className="w-full text-left px-3 py-2 text-sm text-content-secondary hover:bg-surface-tertiary hover:text-content-primary transition-colors"
                     onClick={() => {
                       setMenuAcoes(false)
+                      setPainel('anotacao')
+                      if (podeAnexar && !notaArquivo) arquivoRef.current?.click()
+                    }}
+                  >
+                    Anexar imagem
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm text-content-secondary hover:bg-surface-tertiary hover:text-content-primary transition-colors"
+                    onClick={() => {
+                      setMenuAcoes(false)
                       setNovaData((d) => d || hojeISO())
                       setPainel(painel === 'proximo' ? 'none' : 'proximo')
                     }}
@@ -905,22 +1015,116 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
           </div>
         </div>
 
+        {/* Sempre montado: "Ações → Anexar imagem" abre o seletor no mesmo clique. */}
+        <input
+          ref={arquivoRef}
+          type="file"
+          accept={ANEXO_ACCEPT}
+          className="hidden"
+          onChange={(e) => {
+            escolherImagem(e.target.files?.[0])
+            e.target.value = ''
+          }}
+        />
         {painel === 'anotacao' && (
-          <div className="rounded-lg border border-border p-3 space-y-2 animate-fade-up">
+          <div
+            className="rounded-lg border border-border p-3 space-y-2 animate-fade-up"
+            // Soltar a imagem fora da área pontilhada não pode fazer o navegador abrir o arquivo.
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              setArrastando(false)
+              if (podeAnexar && !acaoLoading) escolherImagem(e.dataTransfer.files?.[0])
+            }}
+            onPaste={(e) => {
+              if (!podeAnexar) return
+              const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith('image/'))
+              if (!file) return
+              e.preventDefault()
+              escolherImagem(file)
+            }}
+          >
             <textarea
               value={notaTexto}
               onChange={(e) => setNotaTexto(e.target.value)}
               rows={3}
               autoFocus
-              placeholder="Escreva a anotação…"
+              placeholder={notaArquivo ? 'Legenda (opcional)…' : 'Escreva a anotação…'}
               className={inputCls}
             />
+            {!podeAnexar ? (
+              <p className="rounded-md bg-surface-tertiary px-3 py-2 text-xs text-content-tertiary">
+                Este card não tem conversa no Chatwoot, então não dá para anexar imagem. A anotação de texto continua
+                funcionando e fica só no Pulso.
+              </p>
+            ) : notaArquivo ? (
+              <div className="flex items-center gap-3 rounded-md border border-border p-2">
+                {notaPreview && (
+                  // eslint-disable-next-line @next/next/no-img-element -- prévia local (blob:)
+                  <img src={notaPreview} alt="" className="h-14 w-20 shrink-0 rounded object-cover bg-surface-tertiary" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-content-primary">{notaArquivo.name}</p>
+                  <p className="text-xs text-content-tertiary">
+                    {tamanhoLegivel(notaArquivo.size)} · vai como nota privada na conversa do Chatwoot
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNotaArquivo(null)}
+                  disabled={acaoLoading}
+                  aria-label="Remover imagem"
+                  title="Remover imagem"
+                  className="shrink-0 rounded p-1.5 text-content-tertiary hover:bg-surface-tertiary hover:text-content-primary transition-colors disabled:opacity-50"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => arquivoRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setArrastando(true)
+                }}
+                onDragLeave={() => setArrastando(false)}
+                className={`flex w-full items-center gap-3 rounded-md border border-dashed px-3 py-2.5 text-left transition-colors ${
+                  arrastando ? 'border-brand-500 bg-brand-500/5' : 'border-border hover:bg-surface-tertiary'
+                }`}
+              >
+                <ImagePlus size={18} className="shrink-0 text-content-tertiary" />
+                <span className="min-w-0">
+                  <span className="block text-sm text-content-secondary">
+                    <span className="font-medium text-content-primary">Escolher imagem</span> · arraste aqui ou cole com
+                    Ctrl+V
+                  </span>
+                  <span className="block text-xs text-content-tertiary">JPG, PNG ou WEBP · até 10 MB</span>
+                </span>
+              </button>
+            )}
             <div className="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setPainel('none')}>
+              {acaoLoading && notaArquivo && (
+                <span className="mr-auto text-xs text-content-tertiary">Enviando pro Chatwoot…</span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={acaoLoading}
+                onClick={() => {
+                  setNotaArquivo(null)
+                  setPainel('none')
+                }}
+              >
                 Cancelar
               </Button>
-              <Button size="sm" onClick={salvarAnotacao} loading={acaoLoading}>
-                Salvar anotação
+              <Button
+                size="sm"
+                onClick={salvarAnotacao}
+                loading={acaoLoading}
+                disabled={!notaTexto.trim() && !notaArquivo}
+              >
+                {notaArquivo ? 'Salvar com imagem' : 'Salvar anotação'}
               </Button>
             </div>
           </div>
@@ -1341,12 +1545,19 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
             </div>
 
             <div className="rounded-lg border border-border p-4">
-              <h4 className="text-sm font-semibold text-content-primary mb-1">Histórico</h4>
+              <div className="mb-1 flex items-baseline justify-between gap-3">
+                <h4 className="text-sm font-semibold text-content-primary">Histórico</h4>
+                {totalImagens > 0 && (
+                  <span className="text-xs text-content-tertiary">
+                    {totalImagens} {totalImagens === 1 ? 'imagem anexada' : 'imagens anexadas'}
+                  </span>
+                )}
+              </div>
               <div className="max-h-56 overflow-y-auto pr-1 divide-y divide-border">
                 {historico.length === 0 ? (
                   <p className="py-3 text-sm text-content-tertiary">Sem eventos ainda — internações, perdas e anotações aparecem aqui.</p>
                 ) : (
-                  historico.map((ev, i) => <EventRow key={i} ev={ev} />)
+                  historico.map((ev, i) => <EventRow key={i} ev={ev} onAbrir={(anexo, e) => setAmpliada({ anexo, ev: e })} />)
                 )}
               </div>
             </div>
@@ -1373,6 +1584,12 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
                 {sync === 'ok' ? ' · sincronizado com o Chatwoot' : sync === 'failed' ? ' · falha ao sincronizar Chatwoot' : ''}
               </span>
             )}
+            {!sujo && status !== 'saved' && status !== 'error' && avisoImagem && (
+              <span className="inline-flex items-center gap-1.5 text-success-600 dark:text-success-500">
+                <Check size={13} />
+                Imagem salva · nota privada no Chatwoot
+              </span>
+            )}
             {!sujo && status === 'error' && (
               <span className="inline-flex items-center gap-1.5 text-danger-500">
                 <AlertCircle size={13} />
@@ -1394,10 +1611,69 @@ export function CardDetail({ triagem, open, onClose, autoInternar = false, autoP
       </div>
   )
 
-  if (inline) return corpo
+  const imagemAmpliada =
+    ampliada && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Imagem anexada"
+            className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-black/80 p-4 animate-fade-in"
+            onClick={() => setAmpliada(null)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- arquivo servido pelo Chatwoot */}
+            <img
+              src={ampliada.anexo.url}
+              alt={ampliada.anexo.nome || 'Imagem anexada'}
+              className="max-h-[78vh] max-w-full rounded-md object-contain shadow-modal"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div
+              className="flex w-full max-w-3xl flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm text-white/80"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="min-w-0 break-words">
+                {ampliada.ev.agente} · {ampliada.ev.data}
+                {ampliada.ev.nota ? ` · ${ampliada.ev.nota}` : ''}
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                {linkChatwoot?.tipo === 'conversa' && !inline && (
+                  <a
+                    href={linkChatwoot.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-white/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 transition-colors"
+                  >
+                    <ExternalLink size={14} />
+                    Ver na conversa do Chatwoot
+                  </a>
+                )}
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setAmpliada(null)}
+                  className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-black hover:bg-white/90 transition-colors"
+                >
+                  Fechar
+                </button>
+              </span>
+            </div>
+          </div>,
+          document.body
+        )
+      : null
+
+  if (inline)
+    return (
+      <>
+        {corpo}
+        {imagemAmpliada}
+      </>
+    )
   return (
     <Modal open={open} onClose={onClose} title="Detalhes do contato" size="xl">
       {corpo}
+      {imagemAmpliada}
     </Modal>
   )
 }

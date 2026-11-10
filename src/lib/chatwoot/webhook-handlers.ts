@@ -27,6 +27,7 @@ import {
   triagemFromChatwoot,
 } from './mapping'
 import { ehNotaDoCrm } from './sync'
+import { anexosDeImagem, NOTA_SEM_LEGENDA } from '@/lib/anexos'
 import { atualizarSeMudou, inserirComRedeDeSeguranca, lerTriagem, type AnyObj } from '@/lib/triagem-db'
 import {
   acharCardPorCpf,
@@ -406,23 +407,30 @@ export async function onMessageCreated(body: AnyObj): Promise<AnyObj> {
 
   // 1) Nota privada escrita no Chatwoot → histórico do CRM.
   if (privada) {
-    if (!conteudo.trim()) return { skipped: 'nota vazia' }
+    // Imagem anexada como nota direto no Chatwoot também entra no card (só o link).
+    const anexos = anexosDeImagem(body.attachments)
+    if (!conteudo.trim() && !anexos.length) return { skipped: 'nota vazia' }
     if (ehNotaDoCrm(conteudo)) return { skipped: 'eco de nota do CRM' }
     const row = await lerTriagem(admin, { conversation_id: convId }, 'id')
     if (!row) return { skipped: 'lead inexistente' }
     const nomeBot = botNome()
     const ehBot = sender?.name === nomeBot || /^📝 Resumo da triagem/.test(conteudo)
-    const { error } = await admin.from('anotacoes').upsert(
-      {
-        triagem_id: row.id,
-        usuario_id: null,
-        conteudo: conteudo.trim(),
-        origem: ehBot ? 'bot' : 'chatwoot',
-        autor_nome: ehBot ? 'Mônica' : (sender?.name as string | undefined) ?? 'Chatwoot',
-        chatwoot_message_id: Number(body.id) || null,
-      },
-      { onConflict: 'chatwoot_message_id', ignoreDuplicates: true }
-    )
+    const nota = {
+      triagem_id: row.id,
+      usuario_id: null,
+      conteudo: conteudo.trim() || NOTA_SEM_LEGENDA,
+      origem: ehBot ? 'bot' : 'chatwoot',
+      autor_nome: ehBot ? 'Mônica' : (sender?.name as string | undefined) ?? 'Chatwoot',
+      chatwoot_message_id: Number(body.id) || null,
+    }
+    const gravar = (linha: AnyObj) =>
+      admin.from('anotacoes').upsert(linha, { onConflict: 'chatwoot_message_id', ignoreDuplicates: true })
+    let { error } = await gravar(anexos.length ? { ...nota, anexos } : nota)
+    // Migration 20261110 (anexos) ainda não rodou: guarda a nota sem a imagem, se houver texto.
+    if (error && anexos.length && /anexos/i.test(error.message)) {
+      if (!conteudo.trim()) return { skipped: 'imagem sem texto e coluna anexos ausente (rode a migration 20261110)' }
+      ;({ error } = await gravar(nota))
+    }
     if (error) return { erro: `anotacoes: ${error.message} (rode a migration 20260823)` }
     return { convId, nota: 'importada' }
   }

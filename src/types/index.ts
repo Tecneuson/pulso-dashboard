@@ -571,6 +571,9 @@ export interface Agendamento {
   alvo_nome?: string | null
 }
 
+export type { AnexoNota } from '@/lib/anexos'
+import type { AnexoNota } from '@/lib/anexos'
+
 export const ANOTACAO_ORIGEM = ['crm', 'chatwoot', 'bot'] as const
 export type AnotacaoOrigem = (typeof ANOTACAO_ORIGEM)[number]
 
@@ -587,6 +590,8 @@ export interface Anotacao {
   autor_nome?: string | null
   /** Id da mensagem privada no Chatwoot (dedupe do eco CRM ⇄ Chatwoot). */
   chatwoot_message_id?: number | null
+  /** Imagens da nota. O arquivo mora no Chatwoot; aqui ficam só os links. */
+  anexos?: AnexoNota[] | null
   usuarios?: { nome: string } | null
 }
 
