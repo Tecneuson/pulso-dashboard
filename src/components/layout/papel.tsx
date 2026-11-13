@@ -7,8 +7,9 @@ import { createContext, useContext, type ReactNode } from 'react'
  * Só serve para esconder botões na UI: quem garante a regra são as rotas de API
  * (`requireUserApi({ gestor: true })`).
  *
- * Admin (gestor) faz tudo. Agente de atendimento vê todas as telas e trabalha os
- * cards, mas não cadastra, não edita nem apaga cadastros, e não exporta/importa.
+ * Admin (gestor) faz tudo. Agente de atendimento vê todas as telas, trabalha os
+ * cards e cadastra contatos (responsável e consultor), mas não edita nem apaga
+ * cadastros, não cria hospital/captador/categoria, e não exporta/importa.
  */
 const PapelContext = createContext<{ admin: boolean }>({ admin: false })
 

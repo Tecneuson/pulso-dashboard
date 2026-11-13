@@ -46,7 +46,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { supabase, error } = await requireUserApi({ gestor: true })
+  // Cadastrar contato é parte do atendimento: qualquer usuário logado pode.
+  // Editar e desativar continuam só com gestor (PATCH/DELETE abaixo).
+  const { supabase, error } = await requireUserApi()
   if (error) return error
 
   const parsed = pessoaCreateSchema.safeParse(await request.json().catch(() => null))
